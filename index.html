@@ -104,7 +104,8 @@
     display:flex;
     gap:10px;
     align-items:center;
-    min-width: 260px;
+    min-width: 0; /* ★スマホで邪魔にならない */
+    flex: 1 1 auto;
   }
   .logo{
     width:38px;
@@ -622,35 +623,6 @@
     color: rgba(2,6,23,0.88);
   }
 
-  /* プレビューのキャプション配置 */
-  .preview-card.pos-bottom{ flex-direction:column; }
-  .preview-card.pos-bottom .preview-image-area{ flex:1; }
-  .preview-card.pos-bottom .preview-label-area{ height:var(--label-h); border-top:2px solid rgba(0,0,0,0.65); }
-
-  .preview-card.pos-top{ flex-direction:column; }
-  .preview-card.pos-top .preview-label-area{ height:var(--label-h); border-bottom:2px solid rgba(0,0,0,0.65); }
-  .preview-card.pos-top .preview-image-area{ flex:1; }
-
-  .preview-card.pos-left{ flex-direction:row; }
-  .preview-card.pos-left .preview-label-area{
-    width: var(--label-w);
-    border-right: 2px solid rgba(0,0,0,0.65);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-  }
-  .preview-card.pos-left .preview-image-area{ flex:1; }
-
-  .preview-card.pos-right{ flex-direction:row; }
-  .preview-card.pos-right .preview-image-area{ flex:1; }
-  .preview-card.pos-right .preview-label-area{
-    width: var(--label-w);
-    border-left: 2px solid rgba(0,0,0,0.65);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-  }
-
   .help{
     margin-top: 10px;
     font-size: 12px;
@@ -712,6 +684,59 @@
     flex-wrap:wrap;
     border-top: 1px solid var(--stroke);
     background: rgba(255,255,255,0.80);
+  }
+
+  /* ===== Responsive (スマホ改善) ===== */
+  @media (max-width: 860px){
+    .topbar{
+      padding: 8px 10px;
+      flex-direction:column;
+      align-items:stretch;
+      gap: 8px;
+    }
+    .logo{
+      width: 30px;
+      height: 30px;
+      border-radius: 10px;
+    }
+    .brand h1{ font-size: 12px; }
+    .brand p{ display:none; } /* ★タイトルの邪魔を削減 */
+    .controls{
+      width:100%;
+      display:grid;                 /* ★レイアウト/出力を並列 */
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      justify-content:stretch;
+      align-items:stretch;
+    }
+    .panel{
+      width:100%;
+      max-width:none;
+      padding: 8px;
+      gap: 8px;
+    }
+    .panel .section-title{
+      width:100%;
+      margin-right:0;
+    }
+
+    .pagebar{
+      flex-direction:column;
+      align-items:stretch;
+    }
+    .pagebar > div{
+      width:100%;
+      justify-content:space-between;
+    }
+    .workspace-head{
+      width: min(1120px, 96vw);
+    }
+  }
+  @media (max-width: 520px){
+    .controls{ grid-template-columns: 1fr; } /* 極小幅は縦積み */
+  }
+  @media (max-width: 520px){
+    .preview-box{ min-height: 260px; }
   }
 
   /* ===== Print ===== */
@@ -959,8 +984,8 @@
             <div style="font-weight:1000; font-size:12px; margin-bottom:8px;">トリミング調整（数値）</div>
             <div class="formgrid">
               <div>拡大</div><input type="range" id="fS" min="0.1" max="3" step="0.01" />
-              <div>左右(px)</div><input type="range" id="fX" min="-600" max="600" step="1" />
-              <div>上下(px)</div><input type="range" id="fY" min="-600" max="600" step="1" />
+              <div>左右(px)</div><input type="range" id="fX" min="-2000" max="2000" step="1" />
+              <div>上下(px)</div><input type="range" id="fY" min="-2000" max="2000" step="1" />
             </div>
             <div class="hint">プレビュー操作（ドラッグ/ズーム）と数値は同期します。</div>
           </div>
@@ -1024,15 +1049,17 @@
 
 <script>
 /* =========================
-   フルコード（改善版）
-   - AUTOでも必ず「＋追加」枠を1つ表示（リセット直後に操作不能にならない）
-   - リセットを安全化（reloadしない / Undo / 任意バックアップ / 範囲選択）
+   フルコード（改善版 v5）
+   - スマホUI：タイトル縮小＋「レイアウト」「出力/保存」を並列（レスポンシブ）
+   - 画像が右下の見えない位置に出る問題：
+       画像の基準を「中央基準」に統一（transformに translate(-50%,-50%) を追加）
+       既存データは自動で座標移行（旧方式の見た目を崩さない）
+   - AUTOでも必ず「＋追加」枠を1つ表示
    - 印刷時は「＋追加」枠を非表示
    - D&Dの“本物の自動フィット”維持
-   - tempState代入バグ修正済み
    ========================= */
 
-const STORAGE_KEY = 'pecs_cards_v4_pages_layout_labelratio';
+const STORAGE_KEY = 'pecs_cards_v4_pages_layout_labelratio'; // 既存データ互換のためキー維持
 const UNDO_KEY = STORAGE_KEY + '_undo';
 
 // 画像圧縮設定
@@ -1066,8 +1093,12 @@ const DEFAULT_GRID_ROWS = 3;
 const DEFAULT_LABEL_H_PERCENT = 22; // top/bottom
 const DEFAULT_LABEL_W_PERCENT = 22; // left/right
 
+// 座標方式（v1:旧 / v2:中央基準）
+const COORD_VER_LATEST = 2;
+
 function buildDefaultAppData(){
   return {
+    coordVer: COORD_VER_LATEST,
     orientation: 'PORTRAIT',
     sheetZoom: 'FIT',
     imgBg: DEFAULT_IMG_BG,
@@ -1123,7 +1154,7 @@ let preview = {
   pinchStartScale: 1
 };
 
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
   const saved = localStorage.getItem(STORAGE_KEY);
   if(saved){
     try{
@@ -1161,6 +1192,13 @@ window.addEventListener('load', () => {
   wireSettingsInputs();
 
   applyOrientationCss();
+
+  // ★座標方式の移行（旧データがある場合、見た目を保ったまま中央基準に変換）
+  const migrated = await migrateCoordinatesToCenteredIfNeeded();
+  if(migrated){
+    saveData();
+  }
+
   renderPages();
   updatePageControls();
 
@@ -1175,8 +1213,10 @@ window.addEventListener('load', () => {
 function migrateData(old){
   if(!old || typeof old !== 'object') old = buildDefaultAppData();
 
+  // 旧：単一ページ構造 → 新：pagesへ
   if(!old.pages){
     old = {
+      coordVer: old.coordVer || 1,
       orientation: old.orientation || 'PORTRAIT',
       sheetZoom: old.sheetZoom || 'FIT',
       imgBg: old.imgBg || DEFAULT_IMG_BG,
@@ -1194,6 +1234,7 @@ function migrateData(old){
     };
   }
 
+  if(!old.coordVer) old.coordVer = 1;
   if(!old.sheetZoom) old.sheetZoom = 'FIT';
   if(!old.imgBg) old.imgBg = DEFAULT_IMG_BG;
   if(!old.labelFontSize) old.labelFontSize = DEFAULT_LABEL_FONT_SIZE;
@@ -1226,6 +1267,63 @@ function migrateData(old){
 }
 
 // ------------------------------------
+// ★座標移行（v1 → v2）
+// 旧：left/top=50% + translate(x,y)... で「画像の左上が中心」になりやすかった
+// 新：translate(-50%,-50%) を必ず入れて「画像の中心が中心」になる方式へ統一
+// 旧の見た目を維持するため、x,y を + (naturalW/2, naturalH/2) して変換する
+// ------------------------------------
+async function migrateCoordinatesToCenteredIfNeeded(){
+  if((appData.coordVer || 1) >= COORD_VER_LATEST) return false;
+
+  const cache = new Map(); // dataUrl -> Promise<{w,h}>
+  const loadSize = (dataUrl) => {
+    if(cache.has(dataUrl)) return cache.get(dataUrl);
+    const p = new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth || img.width, h: img.naturalHeight || img.height });
+      img.onerror = () => resolve({ w: 0, h: 0 });
+      img.src = dataUrl;
+    });
+    cache.set(dataUrl, p);
+    return p;
+  };
+
+  const tasks = [];
+  appData.pages.forEach(pg => {
+    pg.cards.forEach(c => {
+      if(!c) return;
+      if(!c.img){
+        // 画像なしはそのまま（中央基準でも差異が出ない）
+        return;
+      }
+      tasks.push(loadSize(c.img).then(({w,h}) => {
+        if(w > 0 && h > 0){
+          c.x = (Number(c.x) || 0) + (w / 2);
+          c.y = (Number(c.y) || 0) + (h / 2);
+        }
+      }));
+    });
+  });
+
+  await Promise.all(tasks);
+
+  appData.coordVer = COORD_VER_LATEST;
+  return true;
+}
+
+// ------------------------------------
+// Transform（中央基準）
+// ------------------------------------
+function makeCenteredTransform(x, y, rotate, scale){
+  const xx = Number(x) || 0;
+  const yy = Number(y) || 0;
+  const rr = Number(rotate) || 0;
+  const ss = (Number(scale) || 1);
+  // ★必ず translate(-50%,-50%) を入れて「中央が中心」になるようにする
+  return `translate(-50%, -50%) translate(${xx}px, ${yy}px) rotate(${rr}deg) scale(${ss})`;
+}
+
+// ------------------------------------
 // UI: Orientation / Zoom / Bg
 // ------------------------------------
 function setOrientation(o){
@@ -1250,6 +1348,11 @@ function applyOrientationCss(){
     document.getElementById('oLANDSCAPE').classList.add('active');
     document.getElementById('dynPrintStyle').textContent = `@page { size: A4 landscape; margin:0; }`;
   }
+
+  // ズームボタンのactive復元
+  const z = appData.sheetZoom;
+  if(z === 'FIT') setZoomPreset('FIT');
+  else setZoomPreset(Number(z));
 }
 
 function setZoomPreset(v){
@@ -1383,7 +1486,7 @@ function renderSheetContent(sheetEl, pg, pIdx){
 
   for(let k=0; k<renderCount; k++){
     const isAdder = (pg.layoutMode !== 'GRID') && (k === pg.cards.length);
-    const cData = isAdder ? null : pg.cards[k]; // 末尾は必ず「追加」扱い
+    const cData = isAdder ? null : pg.cards[k];
 
     const cell = document.createElement('div');
     cell.className = 'cell';
@@ -1391,8 +1494,8 @@ function renderSheetContent(sheetEl, pg, pIdx){
     cell.style.height = `${ch}mm`;
 
     // D&D用 data属性
-    cell.dataset.pIdx = String(pIdx); // -> data-p-idx
-    cell.dataset.cIdx = String(k);    // -> data-c-idx
+    cell.dataset.pIdx = String(pIdx);
+    cell.dataset.cIdx = String(k);
 
     if(cData){
       const bc = cData.borderColor || DEFAULT_BORDER_COLOR;
@@ -1420,8 +1523,7 @@ function renderSheetContent(sheetEl, pg, pIdx){
       if(cData.img){
         const img = document.createElement('img');
         img.src = cData.img;
-        const tr = `translate(${cData.x}px, ${cData.y}px) rotate(${cData.rotate}deg) scale(${cData.scale})`;
-        img.style.transform = tr;
+        img.style.transform = makeCenteredTransform(cData.x, cData.y, cData.rotate, cData.scale);
         imgArea.appendChild(img);
       } else {
         const ph = document.createElement('span');
@@ -1437,7 +1539,7 @@ function renderSheetContent(sheetEl, pg, pIdx){
       span.textContent = cData.label || '';
       lblArea.appendChild(span);
 
-      // posに応じてDOM順序を入れ替え（CSSでorder制御しない）
+      // posに応じてDOM順序を入れ替え
       if(pos === 'top' || pos === 'left'){
         cell.appendChild(lblArea);
         cell.appendChild(imgArea);
@@ -1648,9 +1750,16 @@ function openEditor(pIdx, cIdx){
   bcPicker.value = normalizeHexColorOr(tempState.borderColor, DEFAULT_BORDER_COLOR);
   bwInput.value = (tempState.borderWidth !== null && tempState.borderWidth !== undefined) ? tempState.borderWidth : DEFAULT_BORDER_WIDTH;
 
-  updatePreview();
+  updatePreview(true);
 
   document.getElementById('editorModal').style.display = 'flex';
+
+  // ★開いた直後、表示領域が確定してから「見失い防止」を一度だけ走らせる
+  requestAnimationFrame(() => {
+    if(tempState.img){
+      ensureImageVisibleInPreview();
+    }
+  });
 }
 
 function closeModal(){
@@ -1666,11 +1775,30 @@ function saveCard(){
   closeModal();
 }
 
-function updatePreview(){
+// previewのDOM順序をposに合わせて入れ替える
+function reorderPreviewChildren(pos){
   const card = preview.cardEl;
-  card.className = `preview-card pos-${tempState.labelPos}`;
+  const imgArea = preview.imgAreaEl;
+  const label = preview.labelEl;
 
-  const isVert = (tempState.labelPos === 'top' || tempState.labelPos === 'bottom');
+  while(card.firstChild) card.removeChild(card.firstChild);
+
+  if(pos === 'top' || pos === 'left'){
+    card.appendChild(label);
+    card.appendChild(imgArea);
+  }else{
+    card.appendChild(imgArea);
+    card.appendChild(label);
+  }
+}
+
+function updatePreview(isFromOpen=false){
+  const pos = tempState.labelPos || DEFAULT_LABEL_POS;
+
+  reorderPreviewChildren(pos);
+  preview.cardEl.className = `preview-card pos-${pos}`;
+
+  const isVert = (pos === 'top' || pos === 'bottom');
 
   preview.labelEl.style.height = '';
   preview.labelEl.style.width = '';
@@ -1682,21 +1810,20 @@ function updatePreview(){
   if(isVert){
     const hVal = (tempState.labelH !== null && tempState.labelH !== undefined) ? tempState.labelH : DEFAULT_LABEL_H_PERCENT;
     preview.labelEl.style.height = `${hVal}%`;
-    if(tempState.labelPos==='bottom') preview.labelEl.style.borderTop = '2px solid rgba(0,0,0,0.65)';
+    if(pos==='bottom') preview.labelEl.style.borderTop = '2px solid rgba(0,0,0,0.65)';
     else preview.labelEl.style.borderBottom = '2px solid rgba(0,0,0,0.65)';
   } else {
     const wVal = (tempState.labelW !== null && tempState.labelW !== undefined) ? tempState.labelW : DEFAULT_LABEL_W_PERCENT;
     preview.labelEl.style.width = `${wVal}%`;
-    if(tempState.labelPos==='left') preview.labelEl.style.borderRight = '2px solid rgba(0,0,0,0.65)';
+    if(pos==='left') preview.labelEl.style.borderRight = '2px solid rgba(0,0,0,0.65)';
     else preview.labelEl.style.borderLeft = '2px solid rgba(0,0,0,0.65)';
   }
 
-  const box = preview.box;
   const bColor = (tempState.borderColor !== null && tempState.borderColor !== undefined) ? tempState.borderColor : DEFAULT_BORDER_COLOR;
   const bWidth = (tempState.borderWidth !== null && tempState.borderWidth !== undefined) ? tempState.borderWidth : DEFAULT_BORDER_WIDTH;
 
-  box.style.setProperty('--preview-border-c', bColor);
-  box.style.setProperty('--preview-border-w', `${bWidth}px`);
+  preview.box.style.setProperty('--preview-border-c', bColor);
+  preview.box.style.setProperty('--preview-border-w', `${bWidth}px`);
 
   preview.labelEl.textContent = document.getElementById('fL').value;
   tempState.label = document.getElementById('fL').value;
@@ -1708,11 +1835,40 @@ function updatePreview(){
     preview.imgEl.style.display = 'block';
     preview.phEl.style.display = 'none';
 
-    const tr = `translate(${tempState.x}px, ${tempState.y}px) rotate(${tempState.rotate}deg) scale(${tempState.scale})`;
-    preview.imgEl.style.transform = tr;
+    applyPreviewImageTransform();
+
+    // ★“右下の見えないところ”に行く事故を防ぐ（開いた直後/画像差し替え直後）
+    if(isFromOpen){
+      requestAnimationFrame(() => ensureImageVisibleInPreview());
+    }
   } else {
     preview.imgEl.style.display = 'none';
     preview.phEl.style.display = 'flex';
+  }
+}
+
+function applyPreviewImageTransform(){
+  preview.imgEl.style.transform = makeCenteredTransform(tempState.x, tempState.y, tempState.rotate, tempState.scale);
+}
+
+// 画像がプレビュー枠内にほぼ見えていないとき、自動で中央に戻す（保存は押さない限り反映されない）
+function ensureImageVisibleInPreview(){
+  if(!tempState.img) return;
+
+  const ar = preview.imgAreaEl.getBoundingClientRect();
+  const ir = preview.imgEl.getBoundingClientRect();
+
+  const interW = Math.max(0, Math.min(ar.right, ir.right) - Math.max(ar.left, ir.left));
+  const interH = Math.max(0, Math.min(ar.bottom, ir.bottom) - Math.max(ar.top, ir.top));
+  const interArea = interW * interH;
+
+  // ほぼ見えていない場合は中央へ
+  if(interArea < 80){
+    tempState.x = 0;
+    tempState.y = 0;
+    document.getElementById('fX').value = 0;
+    document.getElementById('fY').value = 0;
+    applyPreviewImageTransform();
   }
 }
 
@@ -1720,16 +1876,20 @@ function updatePreview(){
 // Editor Inputs
 // ------------------------------------
 function wireRangeInputs(){
-  const sync = (id, key) => {
+  const sync = (id, key, isInt=false) => {
     const el = document.getElementById(id);
     el.addEventListener('input', () => {
-      tempState[key] = parseFloat(el.value);
+      const v = isInt ? parseInt(el.value, 10) : parseFloat(el.value);
+      tempState[key] = (isNaN(v) ? (key==='scale'?1:0) : v);
+      if(key === 'x' || key === 'y' || key === 'scale') {
+        // 右下迷子を避けるため、値変更後に即反映
+      }
       updatePreview();
     });
   };
   sync('fS', 'scale');
-  sync('fX', 'x');
-  sync('fY', 'y');
+  sync('fX', 'x', true);
+  sync('fY', 'y', true);
 
   document.getElementById('fL').addEventListener('input', () => updatePreview());
 }
@@ -1800,6 +1960,9 @@ function removeImage(){
     tempState.y = 0;
     tempState.scale = 1;
     tempState.rotate = 0;
+    document.getElementById('fS').value = 1;
+    document.getElementById('fX').value = 0;
+    document.getElementById('fY').value = 0;
     updatePreview();
   }
 }
@@ -1821,18 +1984,27 @@ function centerImage(){
   updatePreview();
 }
 
-// Editor内の「枠に合わせる」
+// Editor内の「枠に合わせる」（cover）
 function fitToFrame(){
+  fitToFrameSafe(0);
+}
+
+function fitToFrameSafe(tryCount){
   if(!tempState.img) return;
 
   const areaW = preview.imgAreaEl.clientWidth;
   const areaH = preview.imgAreaEl.clientHeight;
+
+  if((!areaW || !areaH) && tryCount < 12){
+    requestAnimationFrame(() => fitToFrameSafe(tryCount + 1));
+    return;
+  }
   if(!areaW || !areaH) return;
 
   const i = new Image();
   i.onload = () => {
-    const nw = i.naturalWidth;
-    const nh = i.naturalHeight;
+    const nw = i.naturalWidth || i.width;
+    const nh = i.naturalHeight || i.height;
 
     const isRot = (Math.abs(tempState.rotate) % 180 === 90);
     const w = isRot ? nh : nw;
@@ -1862,7 +2034,6 @@ function openCameraPicker(){ document.getElementById('fCam').click(); }
 
 function hImg(input){
   if(input.files && input.files[0]){
-    // エディタ取り込み
     handleImageFile(input.files[0], { mode: 'EDITOR' });
     input.value = '';
   }
@@ -1885,19 +2056,17 @@ function handleImageFile(file, opts){
         const pIdx = opts.targetPageIdx;
         const cIdx = opts.targetCardIdx;
 
-        // 確実に配列を用意
         const pg = appData.pages[pIdx];
         while(pg.cards.length <= cIdx){
           pg.cards.push(null);
         }
-
         if(!pg.cards[cIdx]){
           pg.cards[cIdx] = createNewCardData();
         }
+
         const c = pg.cards[cIdx];
         c.img = dataUrl;
 
-        // D&D：本物の自動フィット（image-area 実寸で cover）
         saveData();
         renderPages();
 
@@ -1912,7 +2081,7 @@ function handleImageFile(file, opts){
         // エディタへロード
         tempState.img = dataUrl;
 
-        // 変数代入バグ修正
+        // ★迷子防止：必ず中央基準に初期化
         tempState.x = 0;
         tempState.y = 0;
         tempState.rotate = 0;
@@ -1921,10 +2090,11 @@ function handleImageFile(file, opts){
         document.getElementById('fS').value = 1;
         document.getElementById('fX').value = 0;
         document.getElementById('fY').value = 0;
+
         updatePreview();
 
-        // 画像読込後にフィット
-        setTimeout(fitToFrame, 80);
+        // 画像読込後に確実にフィット（領域確定待ち込み）
+        requestAnimationFrame(() => fitToFrameSafe(0));
       }
     });
   };
@@ -1955,6 +2125,7 @@ function compressImage(srcBase64, cb){
     ctx.drawImage(img, 0,0,w,h);
     cb(cvs.toDataURL('image/jpeg', IMG_JPEG_QUALITY));
   };
+  img.onerror = () => cb(srcBase64);
   img.src = srcBase64;
 }
 
@@ -1993,8 +2164,8 @@ function autoFitCardImageDOM(pIdx, cIdx){
 
     const i = new Image();
     i.onload = () => {
-      const nw = i.naturalWidth;
-      const nh = i.naturalHeight;
+      const nw = i.naturalWidth || i.width;
+      const nh = i.naturalHeight || i.height;
 
       const rot = (c.rotate || 0) % 360;
       const isRot = (Math.abs(rot) % 180 === 90);
@@ -2010,6 +2181,10 @@ function autoFitCardImageDOM(pIdx, cIdx){
       c.y = 0;
       c.rotate = 0;
 
+      resolve();
+    };
+    i.onerror = () => {
+      c.x = 0; c.y = 0; c.rotate = 0; c.scale = 1;
       resolve();
     };
     i.src = c.img;
@@ -2050,8 +2225,8 @@ function wirePreviewPointerEvents(){
       tempState.x = preview.baseX + dx;
       tempState.y = preview.baseY + dy;
 
-      document.getElementById('fX').value = tempState.x;
-      document.getElementById('fY').value = tempState.y;
+      document.getElementById('fX').value = Math.round(tempState.x);
+      document.getElementById('fY').value = Math.round(tempState.y);
       updatePreview();
 
     } else if(preview.pointers.size === 2){
@@ -2143,7 +2318,7 @@ function setupDragAndDrop(){
           chain = chain.then(() => new Promise((res) => {
             const newIdx = appData.pages[pIdx].cards.length;
             handleImageFile(files[i], { mode:'DROP', targetPageIdx: pIdx, targetCardIdx: newIdx });
-            setTimeout(res, 180);
+            setTimeout(res, 160);
           }));
         }
       }
@@ -2171,10 +2346,15 @@ function exportJson(){
 function importJson(input){
   if(input.files && input.files[0]){
     const r = new FileReader();
-    r.onload = (e) => {
+    r.onload = async (e) => {
       try{
         const d = JSON.parse(e.target.result);
         appData = migrateData(d);
+
+        // JSON読み込み後も座標移行
+        const migrated = await migrateCoordinatesToCenteredIfNeeded();
+        if(migrated) saveData();
+
         curP = 0;
         curIdx = null;
         closeModal();
@@ -2301,4 +2481,3 @@ function normalizeHexColorOr(c, def){
 </script>
 </body>
 </html>
-
