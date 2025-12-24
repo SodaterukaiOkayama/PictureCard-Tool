@@ -1,0 +1,2303 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>絵カード作成ツールSodaterukaiNobuhara</title>
+
+<style>
+  :root{
+    /* A4（JSで縦/横切替） */
+    --a4-width: 210mm;
+    --a4-height: 297mm;
+
+    /* 画面表示倍率（A4プレビューのみ） */
+    --sheet-zoom: 1;
+
+    --pad: 10mm;         /* A4の内側余白 */
+    --gap: 3mm;          /* カード間の隙間 */
+
+    /* ★カードサイズ（mm）※ページごとにJSで切替（実効値） */
+    --card-w: 50mm;
+    --card-h: 50mm;
+
+    /* キャプション領域（カード内の割合） */
+    --label-h: 22%;
+    --label-w: 22%;
+
+    /* ラベル文字サイズ（ヘッダーから一括変更） */
+    --label-font-size: 14px;
+    --label-autofit-min: 9px;
+
+    /* 画像エリア背景色（デフォルト白） */
+    --img-bg: #ffffff;
+
+    /* 枠線（デフォルト）：カード個別のCSS変数で上書き可能 */
+    --default-border-color: rgba(0,0,0,0.85);
+    --default-border-width: 2px;
+
+    /* ========= 明るめUI Theme ========= */
+    --accent: #2563eb;    /* blue */
+    --accent-2: #7c3aed;  /* violet */
+    --danger: #dc2626;
+    --ok: #16a34a;
+
+    --bg0: #f8fafc;       /* slate-50 */
+    --bg1: #eef2ff;       /* indigo-50 */
+
+    --panel: rgba(255,255,255,0.92);
+    --panel2: rgba(255,255,255,0.86);
+
+    --stroke: rgba(15,23,42,0.10);
+    --stroke2: rgba(15,23,42,0.14);
+
+    --text: #0b1220;
+    --muted: rgba(15,23,42,0.66);
+
+    --shadow: 0 10px 26px rgba(2,6,23,0.10);
+    --shadow2: 0 14px 44px rgba(2,6,23,0.14);
+
+    --r12: 12px;
+    --r14: 14px;
+    --r16: 16px;
+  }
+
+  *{ box-sizing:border-box; }
+  html, body{ height:100%; }
+  body{
+    margin:0;
+    font-family: "Hiragino Sans","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    color: var(--text);
+
+    background:
+      radial-gradient(1100px 700px at 12% 12%, rgba(124,58,237,0.14), transparent 62%),
+      radial-gradient(1000px 700px at 88% 18%, rgba(37,99,235,0.14), transparent 60%),
+      linear-gradient(180deg, var(--bg0), var(--bg1));
+
+    overflow:hidden;
+  }
+
+  /* ===== App Shell ===== */
+  .app{
+    height:100%;
+    display:flex;
+    flex-direction:column;
+  }
+
+  .topbar{
+    position:sticky;
+    top:0;
+    z-index:100;
+    padding:12px 14px;
+    display:flex;
+    gap:12px;
+    align-items:stretch;
+    justify-content:space-between;
+
+    background: rgba(255,255,255,0.78);
+    backdrop-filter: blur(12px);
+
+    border-bottom: 1px solid var(--stroke);
+  }
+
+  .brand{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    min-width: 260px;
+  }
+  .logo{
+    width:38px;
+    height:38px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(37,99,235,1), rgba(124,58,237,1));
+    box-shadow: 0 10px 22px rgba(37,99,235,0.18);
+    position:relative;
+    flex:0 0 auto;
+  }
+  .logo:after{
+    content:"";
+    position:absolute;
+    inset:7px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.28);
+    border: 1px solid rgba(255,255,255,0.42);
+  }
+  .brand h1{
+    font-size:14px;
+    margin:0;
+    font-weight:900;
+    color: rgba(2,6,23,0.90);
+    letter-spacing: .02em;
+    line-height:1.2;
+  }
+  .brand p{
+    margin:2px 0 0 0;
+    font-size:12px;
+    color: rgba(2,6,23,0.58);
+    line-height:1.2;
+  }
+
+  .controls{
+    display:flex;
+    gap:12px;
+    align-items:stretch;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--stroke);
+    box-shadow: var(--shadow);
+    border-radius: var(--r16);
+    padding:10px;
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+    max-width: 70vw;
+  }
+
+  .panel .section-title{
+    font-weight:900;
+    font-size:12px;
+    color: rgba(15,23,42,0.72);
+    margin-right:4px;
+    white-space:nowrap;
+  }
+
+  .seg{
+    display:flex;
+    border: 1px solid var(--stroke2);
+    border-radius: 999px;
+    overflow:hidden;
+    background: rgba(2,6,23,0.03);
+  }
+  .seg button{
+    border:none;
+    background: transparent;
+    padding:8px 10px;
+    font-size:12px;
+    cursor:pointer;
+    color: rgba(15,23,42,0.78);
+    font-weight:800;
+    white-space:nowrap;
+  }
+  .seg button:hover{ background: rgba(2,6,23,0.06); }
+  .seg button.active{
+    background: linear-gradient(135deg, rgba(37,99,235,1), rgba(124,58,237,1));
+    color: #fff;
+  }
+
+  .field{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  .label{
+    font-weight:900;
+    font-size:12px;
+    color: rgba(15,23,42,0.78);
+    white-space:nowrap;
+  }
+
+  select, input[type="number"], input[type="color"], textarea{
+    font-family: inherit;
+  }
+
+  select, input[type="number"]{
+    height: 34px;
+    padding: 6px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--stroke2);
+    background: rgba(255,255,255,0.96);
+    outline: none;
+    font-size: 12px;
+    color: rgba(15,23,42,0.86);
+  }
+  select:focus, input[type="number"]:focus, textarea:focus{
+    border-color: rgba(37,99,235,0.55);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.16);
+  }
+  input[type="color"]{
+    width: 40px;
+    height: 34px;
+    padding: 0;
+    border-radius: 12px;
+    border: 1px solid var(--stroke2);
+    background: rgba(255,255,255,0.96);
+    cursor:pointer;
+  }
+
+  .btn{
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 12px;
+    border: 1px solid var(--stroke2);
+    background: rgba(255,255,255,0.96);
+    cursor:pointer;
+    font-size:12px;
+    font-weight:900;
+    color: rgba(15,23,42,0.86);
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .btn:hover{
+    transform: translateY(-1px);
+    box-shadow: 0 12px 26px rgba(2,6,23,0.08);
+  }
+  .btn:active{ transform: translateY(0px); }
+  .btn.primary{
+    border:none;
+    color:#fff;
+    background: linear-gradient(135deg, rgba(37,99,235,1), rgba(124,58,237,1));
+  }
+  .btn.danger{
+    border:none;
+    color:#fff;
+    background: linear-gradient(135deg, rgba(220,38,38,1), rgba(244,63,94,1));
+  }
+  .btn.ghost{
+    background: rgba(255,255,255,0.72);
+  }
+  .btn.small{
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+  .btn:disabled, select:disabled, input:disabled{
+    opacity: 0.55;
+    cursor:not-allowed;
+    transform:none !important;
+    box-shadow:none !important;
+  }
+
+  /* ===== Workspace ===== */
+  main{
+    flex:1;
+    overflow:auto;
+    padding: 18px 18px 26px 18px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 14px;
+  }
+
+  .workspace-head{
+    width: min(1120px, 96vw);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 10px;
+    flex-wrap:wrap;
+  }
+
+  .pagebar{
+    width: min(1120px, 96vw);
+    background: var(--panel2);
+    border: 1px solid var(--stroke);
+    border-radius: var(--r16);
+    padding: 10px;
+    box-shadow: var(--shadow);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+
+  .tabs{
+    display:flex;
+    gap:6px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  .tab{
+    border:none;
+    cursor:pointer;
+    padding: 8px 10px;
+    border-radius: 999px;
+    background: rgba(2,6,23,0.05);
+    color: rgba(15,23,42,0.78);
+    font-weight: 900;
+    font-size: 12px;
+  }
+  .tab:hover{ background: rgba(2,6,23,0.08); }
+  .tab.active{
+    background: linear-gradient(135deg, rgba(37,99,235,1), rgba(124,58,237,1));
+    color:#fff;
+  }
+
+  /* A4表示倍率 */
+  .sheet-stage{
+    transform: scale(var(--sheet-zoom));
+    transform-origin: top center;
+  }
+
+  .sheet{
+    background:#fff;
+    width:var(--a4-width);
+    height:var(--a4-height);
+    padding:var(--pad);
+    display:none;
+    flex-direction:column;
+    box-shadow: var(--shadow2);
+    position:relative;
+    border-radius: 14px;
+    overflow:hidden;
+  }
+  .sheet.active{ display:flex; }
+
+  .sheet-title{
+    font-size: 13px;
+    font-weight: 900;
+    margin: 0 0 10px 0;
+    color: rgba(2,6,23,0.86);
+    display:flex;
+    justify-content:space-between;
+    gap: 10px;
+    align-items:center;
+  }
+  .sheet-title small{
+    font-weight: 800;
+    color: rgba(2,6,23,0.56);
+  }
+
+  .grid-container{
+    display:grid;
+    width:100%;
+    height:100%;
+    gap: var(--gap);
+    flex: 1 1 auto;
+    min-height:0;
+    align-content:start;
+    justify-content:start;
+  }
+
+  /* ===== Card ===== */
+  .cell{
+    width: var(--card-w);
+    height: var(--card-h);
+    position:relative;
+    overflow:hidden;
+    background: #f8fafc;
+    cursor:pointer;
+
+    border-radius: 0;
+
+    border: var(--border-w, var(--default-border-width)) solid var(--border-c, var(--default-border-color));
+    display:flex;
+    box-shadow: 0 10px 18px rgba(2,6,23,0.08);
+    transition: transform .12s ease, box-shadow .12s ease, outline .12s ease;
+  }
+  .cell:hover{
+    transform: translateY(-1px);
+    box-shadow: 0 16px 26px rgba(2,6,23,0.12);
+    outline: 2px solid rgba(37,99,235,0.22);
+    outline-offset: -2px;
+  }
+  .cell.file-over{
+    outline: 3px solid rgba(22,163,74,0.85) !important;
+    outline-offset: -3px;
+  }
+
+  .image-area{
+    position:relative;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: var(--img-bg);
+    min-width:0;
+    min-height:0;
+    flex:1;
+  }
+  .image-area img{
+    position:absolute;
+    left:50%;
+    top:50%;
+    max-width:none !important;
+    transform-origin:center center;
+    will-change: transform;
+    user-select:none;
+    -webkit-user-drag:none;
+  }
+
+  .label-area{
+    background:#fff;
+    padding:6px;
+    font-weight: 900;
+    line-height:1.2;
+    text-align:center;
+    word-break:break-word;
+    overflow:hidden;
+    font-size: var(--label-font-size);
+    color: rgba(2,6,23,0.88);
+  }
+
+  /* キャプション配置 */
+  .cell.pos-bottom{ flex-direction:column; }
+  .cell.pos-bottom .image-area{ flex:1; }
+  .cell.pos-bottom .label-area{ height:var(--label-h); border-top:2px solid rgba(0,0,0,0.65); }
+
+  .cell.pos-top{ flex-direction:column; }
+  .cell.pos-top .label-area{ height:var(--label-h); border-bottom:2px solid rgba(0,0,0,0.65); }
+  .cell.pos-top .image-area{ flex:1; }
+
+  .cell.pos-left{ flex-direction:row; }
+  .cell.pos-left .label-area{
+    width: var(--label-w);
+    border-right: 2px solid rgba(0,0,0,0.65);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .cell.pos-left .image-area{ flex:1; }
+
+  .cell.pos-right{ flex-direction:row; }
+  .cell.pos-right .image-area{ flex:1; }
+  .cell.pos-right .label-area{
+    width: var(--label-w);
+    border-left: 2px solid rgba(0,0,0,0.65);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  /* 選択抑止（D&Dやクリックの操作感） */
+  .grid-container, .cell, .cell *{ user-select:none; }
+
+  /* ===== Modal ===== */
+  .modal-overlay{
+    position:fixed;
+    inset:0;
+    background: rgba(2,6,23,0.42);
+    backdrop-filter: blur(10px);
+
+    display:none;
+    justify-content:center;
+    align-items:center;
+    z-index:1000;
+    padding: 14px;
+  }
+  .modal{
+    width: min(1040px, 96vw);
+    max-height: 92vh;
+    overflow:hidden;
+    border-radius: 18px;
+    background: rgba(255,255,255,0.94);
+    border: 1px solid rgba(15,23,42,0.10);
+    box-shadow: var(--shadow2);
+    display:flex;
+    flex-direction:column;
+  }
+  .modal-head{
+    padding: 12px 14px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap: 10px;
+    border-bottom: 1px solid var(--stroke);
+    background: rgba(255,255,255,0.70);
+  }
+  .modal-head h3{
+    margin:0;
+    font-size: 14px;
+    font-weight: 1000;
+    letter-spacing:.02em;
+  }
+  .modal-head .sub{
+    margin:0;
+    font-size: 12px;
+    color: rgba(15,23,42,0.62);
+    font-weight: 800;
+  }
+
+  .modal-body{
+    padding: 14px;
+    overflow:auto;
+  }
+
+  .editor-grid{
+    display:grid;
+    grid-template-columns: 1fr 420px;
+    gap: 14px;
+    align-items:start;
+  }
+  @media (max-width: 980px){
+    .editor-grid{ grid-template-columns: 1fr; }
+  }
+
+  .cardpanel{
+    background: rgba(255,255,255,0.78);
+    border: 1px solid var(--stroke);
+    border-radius: 16px;
+    padding: 12px;
+  }
+
+  .preview-title{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    margin-bottom: 10px;
+  }
+  .preview-title strong{ font-size: 13px; font-weight: 1000; }
+  .preview-title .btnrow{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  .preview-box{
+    width:100%;
+    background: rgba(255,255,255,0.86);
+    border-radius: 0;
+    overflow:hidden;
+    position:relative;
+    touch-action:none;
+    border: var(--preview-border-w, 2px) solid var(--preview-border-c, rgba(0,0,0,0.85));
+    box-shadow: 0 14px 26px rgba(2,6,23,0.10);
+    min-height: 320px;
+  }
+
+  /* ★プレビューを「実カード構造」に合わせる */
+  .preview-card{
+    position:absolute;
+    inset:0;
+    display:flex;
+    background:#f8fafc;
+    border-radius: 0;
+    overflow:hidden;
+  }
+
+  .preview-image-area{
+    position:relative;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: var(--img-bg);
+    flex:1;
+    min-width:0;
+    min-height:0;
+  }
+
+  .preview-image-area .ph{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color: rgba(2,6,23,0.45);
+    font-weight: 1000;
+    background:
+      radial-gradient(500px 280px at 10% 15%, rgba(37,99,235,0.10), transparent 60%),
+      radial-gradient(540px 300px at 90% 10%, rgba(124,58,237,0.10), transparent 62%),
+      repeating-linear-gradient(45deg, rgba(245,245,245,0.9), rgba(245,245,245,0.9) 10px, rgba(255,255,255,0.9) 10px, rgba(255,255,255,0.9) 20px);
+  }
+
+  .preview-img{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform-origin:center center;
+    will-change: transform;
+    user-select:none;
+    -webkit-user-drag:none;
+    max-width:none !important;
+    display:none;
+  }
+
+  .preview-label-area{
+    background:#fff;
+    padding:6px;
+    font-weight: 900;
+    line-height:1.2;
+    text-align:center;
+    word-break:break-word;
+    overflow:hidden;
+    font-size: var(--label-font-size);
+    color: rgba(2,6,23,0.88);
+  }
+
+  /* プレビューのキャプション配置 */
+  .preview-card.pos-bottom{ flex-direction:column; }
+  .preview-card.pos-bottom .preview-image-area{ flex:1; }
+  .preview-card.pos-bottom .preview-label-area{ height:var(--label-h); border-top:2px solid rgba(0,0,0,0.65); }
+
+  .preview-card.pos-top{ flex-direction:column; }
+  .preview-card.pos-top .preview-label-area{ height:var(--label-h); border-bottom:2px solid rgba(0,0,0,0.65); }
+  .preview-card.pos-top .preview-image-area{ flex:1; }
+
+  .preview-card.pos-left{ flex-direction:row; }
+  .preview-card.pos-left .preview-label-area{
+    width: var(--label-w);
+    border-right: 2px solid rgba(0,0,0,0.65);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .preview-card.pos-left .preview-image-area{ flex:1; }
+
+  .preview-card.pos-right{ flex-direction:row; }
+  .preview-card.pos-right .preview-image-area{ flex:1; }
+  .preview-card.pos-right .preview-label-area{
+    width: var(--label-w);
+    border-left: 2px solid rgba(0,0,0,0.65);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .help{
+    margin-top: 10px;
+    font-size: 12px;
+    color: rgba(2,6,23,0.70);
+    line-height: 1.45;
+  }
+  .pill{
+    display:inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--stroke2);
+    background: rgba(255,255,255,0.90);
+    font-size: 12px;
+    font-weight: 900;
+    margin-right: 6px;
+  }
+
+  .formgrid{
+    display:grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px 10px;
+    align-items:center;
+  }
+  .formgrid3{
+    display:grid;
+    grid-template-columns: 120px 1fr 120px;
+    gap: 8px 10px;
+    align-items:center;
+  }
+
+  textarea{
+    width: 100%;
+    min-height: 84px;
+    padding: 10px 10px;
+    border-radius: 14px;
+    border: 1px solid var(--stroke2);
+    background: rgba(255,255,255,0.96);
+    font-size: 13px;
+    resize: vertical;
+  }
+
+  input[type="range"]{
+    width:100%;
+    accent-color: var(--accent);
+  }
+
+  .hint{
+    margin-top: 6px;
+    font-size: 12px;
+    color: rgba(2,6,23,0.55);
+    line-height: 1.45;
+  }
+
+  .modal-footer{
+    padding: 12px 14px;
+    display:flex;
+    justify-content:flex-end;
+    gap: 10px;
+    flex-wrap:wrap;
+    border-top: 1px solid var(--stroke);
+    background: rgba(255,255,255,0.80);
+  }
+
+  /* ===== Print ===== */
+  @page{
+    size: A4 portrait;
+    margin: 0;
+  }
+  @media print{
+    html, body{
+      width: var(--a4-width);
+      height: var(--a4-height);
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #fff !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      overflow: hidden !important;
+    }
+    .topbar, .pagebar, .workspace-head, .no-print{ display:none !important; }
+    main{
+      padding: 0 !important;
+      margin: 0 !important;
+      gap: 0 !important;
+      overflow: visible !important;
+    }
+    .sheet-stage{ transform:none !important; }
+    .sheet{
+      display:flex !important;
+      width: var(--a4-width) !important;
+      height: var(--a4-height) !important;
+      margin:0 !important;
+      box-shadow:none !important;
+      border-radius:0 !important;
+      page-break-after:always;
+      break-after:page;
+      overflow:hidden !important;
+    }
+    .sheet:last-child{ page-break-after:auto; break-after:auto; }
+    .sheet-title{ display:none !important; }
+
+    /* ★AUTOの「＋追加」枠は印刷に出さない */
+    .cell.adder{ display:none !important; }
+  }
+</style>
+
+<style id="dynPrintStyle"></style>
+</head>
+
+<body>
+<div class="app">
+
+  <div class="topbar no-print">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <h1>絵カード作成ツール</h1>
+        <p>ページ別レイアウト／カード編集／印刷(PDF)／JSON保存</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="panel">
+        <span class="section-title">レイアウト</span>
+
+        <div class="field">
+          <span class="label">印刷向き</span>
+          <div class="seg">
+            <button id="oPORTRAIT" type="button" onclick="setOrientation('PORTRAIT')">縦</button>
+            <button id="oLANDSCAPE" type="button" onclick="setOrientation('LANDSCAPE')">横</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="label">表示倍率</span>
+          <div class="seg">
+            <button id="zFIT" type="button" onclick="setZoomPreset('FIT')">Fit</button>
+            <button id="z100" type="button" onclick="setZoomPreset(1.0)">100%</button>
+            <button id="z125" type="button" onclick="setZoomPreset(1.25)">125%</button>
+            <button id="z150" type="button" onclick="setZoomPreset(1.5)">150%</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="label">画像背景</span>
+          <input type="color" id="imgBgPicker" value="#ffffff" />
+          <button class="btn small ghost" type="button" onclick="resetImgBg()">白に戻す</button>
+        </div>
+
+        <div class="field">
+          <span class="label">文字サイズ</span>
+          <input type="number" id="labelFontSize" min="8" max="36" step="1" style="width:86px" />
+          <button class="btn small primary" type="button" onclick="applyLabelFontSize()">一括適用</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <span class="section-title">出力/保存</span>
+
+        <button class="btn primary" type="button" onclick="printAllSheets()">印刷 / PDF</button>
+        <button class="btn" type="button" onclick="exportJson()">JSON保存</button>
+
+        <input type="file" id="jsonFile" accept="application/json,.json" style="display:none" onchange="importJson(this)" />
+        <button class="btn" type="button" onclick="document.getElementById('jsonFile').click()">JSON読込</button>
+
+        <button class="btn" id="undoBtn" type="button" onclick="undoReset()" disabled>元に戻す</button>
+        <button class="btn danger" type="button" onclick="resetData()">リセット</button>
+      </div>
+    </div>
+  </div>
+
+  <main id="main">
+    <div class="workspace-head no-print">
+      <div style="max-width:min(1120px,96vw); width:100%;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+          <div style="font-weight:1000; font-size:13px; color:rgba(2,6,23,0.78);">
+            ページ単位で「サイズ指定（AUTO）」または「枚数指定（GRID）」を切り替えられます。
+          </div>
+          <div style="font-size:12px; color:rgba(2,6,23,0.55); font-weight:800;">
+            PC：カード枠へ画像ドラッグ＆ドロップ対応（複数可）
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pagebar no-print">
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <span class="label">ページ</span>
+        <div class="tabs" id="pageTabs"></div>
+        <button class="btn small" type="button" onclick="addPage()">＋追加</button>
+        <button class="btn small danger" type="button" onclick="deleteCurrentPage()">ページ削除</button>
+      </div>
+
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <div class="field">
+          <span class="label">1ページの枚数</span>
+          <select id="layoutMode" onchange="onLayoutModeChange(this.value)">
+            <option value="AUTO">サイズ指定（自動面付け）</option>
+            <option value="GRID">枚数指定（列×行で最大化）</option>
+          </select>
+        </div>
+
+        <div class="field" id="gridControls">
+          <span class="label">列</span>
+          <input type="number" id="gridCols" min="1" max="12" step="1" style="width:72px" />
+          <span class="label">行</span>
+          <input type="number" id="gridRows" min="1" max="12" step="1" style="width:72px" />
+          <button class="btn small primary" type="button" id="applyGridBtn" onclick="applyGridForCurrentPage()">適用</button>
+        </div>
+
+        <div class="field" id="sizeControls">
+          <span class="label">カードサイズ</span>
+          <select id="sizePreset" onchange="onSizePresetChange(this.value)">
+            <option value="50x50">絵カードマニュアルサイズ（5.0×5.0cm）</option>
+            <option value="32x32">絵カード小（3.2×3.2cm）</option>
+            <option value="44x44">絵カード大（4.4×4.4cm）</option>
+            <option value="50x35">中スケジュール（5.0×3.5cm）</option>
+            <option value="80x60">大スケジュール（8.0×6.0cm）</option>
+            <option value="80x34">中横長スケジュール（8.0×3.4cm）</option>
+            <option value="100x18">横長スケジュール（10.0×1.8cm）</option>
+            <option value="custom">カスタム</option>
+          </select>
+
+          <span class="label">W</span>
+          <input type="number" id="cardWmm" min="5" max="200" step="1" style="width:78px" />
+          <span class="label">H</span>
+          <input type="number" id="cardHmm" min="5" max="200" step="1" style="width:78px" />
+          <button class="btn small primary" type="button" id="applySizeBtn" onclick="applyCardSizeForCurrentPage()">適用</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="workspace"></div>
+  </main>
+
+</div>
+
+<div class="modal-overlay" id="editorModal" role="dialog" aria-modal="true" aria-label="カード編集">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h3>カード編集</h3>
+        <p class="sub">ドラッグで移動 / ホイール・ピンチでズーム / 数値とも同期</p>
+      </div>
+      <button class="btn small" type="button" onclick="closeModal()">閉じる</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="editor-grid">
+        <div class="cardpanel">
+          <div class="preview-title">
+            <strong>プレビュー</strong>
+            <div class="btnrow">
+              <button class="btn small" type="button" onclick="fitToFrame()">枠に合わせる</button>
+              <button class="btn small" type="button" onclick="centerImage()">中央</button>
+              <button class="btn small" type="button" onclick="resetTransform()">リセット</button>
+            </div>
+          </div>
+
+          <div id="previewBox" class="preview-box" aria-label="画像プレビュー枠">
+            <div id="previewCard" class="preview-card pos-bottom">
+              <div id="previewImageArea" class="preview-image-area">
+                <div id="previewPlaceholder" class="ph">画像を選択してください</div>
+                <img id="previewImg" class="preview-img" alt="編集プレビュー" />
+              </div>
+              <div id="previewLabel" class="preview-label-area"></div>
+            </div>
+          </div>
+
+          <div class="help">
+            <span class="pill">ドラッグ</span>移動　
+            <span class="pill">ホイール</span>拡大縮小　
+            <span class="pill">ピンチ</span>拡大縮小
+            <div style="margin-top:8px; color:rgba(2,6,23,0.55); font-weight:800;">
+              ※ 枠線の色/太さ、キャプション配置/枠サイズは右側で変更できます（カードごとに保存）。
+            </div>
+          </div>
+        </div>
+
+        <div class="cardpanel">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+            <div style="font-weight:1000; font-size:13px;">設定</div>
+            <div style="font-size:12px; color:rgba(2,6,23,0.55); font-weight:800;">カードごとに保存</div>
+          </div>
+
+          <hr style="border:none; border-top:1px solid var(--stroke); margin:10px 0;">
+
+          <div style="margin-bottom:12px;">
+            <div style="font-weight:1000; font-size:12px; margin-bottom:8px;">画像</div>
+
+            <input type="file" id="fIn" accept="image/*" style="display:none" onchange="hImg(this)" />
+            <input type="file" id="fCam" accept="image/*" capture="environment" style="display:none" onchange="hImg(this)" />
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn small" type="button" onclick="openCameraPicker()">撮影して取り込む</button>
+              <button class="btn small" type="button" onclick="openFilePicker()">ファイルから選ぶ</button>
+              <button class="btn small" type="button" onclick="rotateImage90()">⟲ 90°回転</button>
+              <button class="btn small danger" type="button" onclick="removeImage()">画像を削除</button>
+            </div>
+
+            <div class="hint">画像は長辺800px・JPEG品質0.7で保存されます（保存時に再圧縮も行います）。</div>
+            <div class="hint">PCでは、フォルダからカード枠へドラッグ＆ドロップして登録できます（複数枚も可）。</div>
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <div style="font-weight:1000; font-size:12px; margin-bottom:8px;">トリミング調整（数値）</div>
+            <div class="formgrid">
+              <div>拡大</div><input type="range" id="fS" min="0.1" max="3" step="0.01" />
+              <div>左右(px)</div><input type="range" id="fX" min="-600" max="600" step="1" />
+              <div>上下(px)</div><input type="range" id="fY" min="-600" max="600" step="1" />
+            </div>
+            <div class="hint">プレビュー操作（ドラッグ/ズーム）と数値は同期します。</div>
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <div style="font-weight:1000; font-size:12px; margin-bottom:8px;">キャプション（文字）</div>
+            <textarea id="fL" rows="3" placeholder="例：りんご / Apple"></textarea>
+            <div class="hint">空でも保存できます。</div>
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <div style="font-weight:1000; font-size:12px; margin-bottom:8px;">キャプション配置</div>
+            <div class="formgrid">
+              <div>位置</div>
+              <select id="labelPosSelect">
+                <option value="bottom">下</option>
+                <option value="top">上</option>
+                <option value="left">左</option>
+                <option value="right">右</option>
+              </select>
+            </div>
+            <div class="hint">※ 見た目と印刷に反映されます。</div>
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <div style="font-weight:1000; font-size:12px; margin-bottom:8px;">キャプション枠の大きさ</div>
+            <div class="formgrid3">
+              <div>上下(高さ%)</div>
+              <input type="range" id="labelHRange" min="10" max="60" step="1" />
+              <input type="number" id="labelHNum" min="10" max="60" step="1" style="width:120px" />
+
+              <div>左右(幅%)</div>
+              <input type="range" id="labelWRange" min="10" max="60" step="1" />
+              <input type="number" id="labelWNum" min="10" max="60" step="1" style="width:120px" />
+            </div>
+            <div class="hint">位置が「上/下」の場合は高さ%が、「左/右」の場合は幅%が反映されます（カードごとに保存）。</div>
+          </div>
+
+          <div style="margin-bottom:6px;">
+            <div style="font-weight:1000; font-size:12px; margin-bottom:8px;">枠線</div>
+            <div class="formgrid">
+              <div>色</div><input type="color" id="borderColorPicker" value="#000000" />
+              <div>太さ(px)</div><input type="number" id="borderWidthInput" min="1" max="10" step="1" style="width:120px" />
+            </div>
+            <div class="hint">未設定の場合は既定（黒・2px）になります。</div>
+            <div style="margin-top:8px;">
+              <button class="btn small" type="button" onclick="resetBorderToDefault()">既定に戻す</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" type="button" onclick="closeModal()">キャンセル</button>
+      <button class="btn primary" type="button" onclick="saveCard()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================
+   フルコード（改善版）
+   - AUTOでも必ず「＋追加」枠を1つ表示（リセット直後に操作不能にならない）
+   - リセットを安全化（reloadしない / Undo / 任意バックアップ / 範囲選択）
+   - 印刷時は「＋追加」枠を非表示
+   - D&Dの“本物の自動フィット”維持
+   - tempState代入バグ修正済み
+   ========================= */
+
+const STORAGE_KEY = 'pecs_cards_v4_pages_layout_labelratio';
+const UNDO_KEY = STORAGE_KEY + '_undo';
+
+// 画像圧縮設定
+const IMG_MAX_LONG_EDGE = 800;
+const IMG_JPEG_QUALITY  = 0.7;
+
+// A4(mm)
+const A4_PORTRAIT  = { w: 210, h: 297 };
+const A4_LANDSCAPE = { w: 297, h: 210 };
+
+// 面付け固定値
+const PAGE_PAD_MM = 10;
+const GAP_MM = 3;
+
+// 文字の自動縮小
+const LABEL_AUTOFIT_MIN = 9;
+
+// 既定値
+const DEFAULT_IMG_BG = '#ffffff';
+const DEFAULT_LABEL_FONT_SIZE = 14;
+const DEFAULT_BORDER_COLOR = '#000000';
+const DEFAULT_BORDER_WIDTH = 2;
+const DEFAULT_LABEL_POS = 'bottom';
+
+// レイアウトモード
+const DEFAULT_LAYOUT_MODE = 'AUTO'; // 'AUTO' or 'GRID'
+const DEFAULT_GRID_COLS = 3;
+const DEFAULT_GRID_ROWS = 3;
+
+// キャプション比率（%）
+const DEFAULT_LABEL_H_PERCENT = 22; // top/bottom
+const DEFAULT_LABEL_W_PERCENT = 22; // left/right
+
+function buildDefaultAppData(){
+  return {
+    orientation: 'PORTRAIT',
+    sheetZoom: 'FIT',
+    imgBg: DEFAULT_IMG_BG,
+    labelFontSize: DEFAULT_LABEL_FONT_SIZE,
+    pages: [
+      {
+        layoutMode: DEFAULT_LAYOUT_MODE,
+        gridCols: DEFAULT_GRID_COLS,
+        gridRows: DEFAULT_GRID_ROWS,
+        cardWmm: 50,
+        cardHmm: 50,
+        cards: []
+      }
+    ]
+  };
+}
+
+let appData = buildDefaultAppData();
+
+let curP = 0;      // 現在ページ
+let curIdx = null; // 現在カード（ページ内 index）
+
+// 編集用一時状態
+let tempState = {
+  img: null,
+  rotate: 0,
+  scale: 1,
+  x: 0,
+  y: 0,
+  label: '',
+  labelPos: DEFAULT_LABEL_POS,
+  labelH: null, // number(%)
+  labelW: null, // number(%)
+  borderColor: null,
+  borderWidth: null
+};
+
+// プレビュー操作用
+let preview = {
+  box: null,
+  cardEl: null,
+  imgAreaEl: null,
+  labelEl: null,
+  imgEl: null,
+  phEl: null,
+  pointers: new Map(),
+  isDragging: false,
+  dragStartX: 0,
+  dragStartY: 0,
+  baseX: 0,
+  baseY: 0,
+  pinchStartDist: 0,
+  pinchStartScale: 1
+};
+
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if(saved){
+    try{
+      const parsed = JSON.parse(saved);
+      appData = migrateData(parsed);
+    }catch(_){
+      appData = migrateData(buildDefaultAppData());
+    }
+  }else{
+    appData = migrateData(buildDefaultAppData());
+  }
+
+  // UI初期化
+  const picker = document.getElementById('imgBgPicker');
+  if(picker){
+    picker.value = normalizeHexColorOr(appData.imgBg || DEFAULT_IMG_BG, DEFAULT_IMG_BG);
+    picker.addEventListener('input', () => setImgBg(picker.value));
+  }
+  const fs = document.getElementById('labelFontSize');
+  if(fs){
+    fs.value = String(appData.labelFontSize || DEFAULT_LABEL_FONT_SIZE);
+  }
+
+  // プレビュー参照
+  preview.box = document.getElementById('previewBox');
+  preview.cardEl = document.getElementById('previewCard');
+  preview.imgAreaEl = document.getElementById('previewImageArea');
+  preview.labelEl = document.getElementById('previewLabel');
+  preview.imgEl = document.getElementById('previewImg');
+  preview.phEl  = document.getElementById('previewPlaceholder');
+
+  wirePreviewPointerEvents();
+  wireRangeInputs();
+  wireLabelSizeInputs();
+  wireSettingsInputs();
+
+  applyOrientationCss();
+  renderPages();
+  updatePageControls();
+
+  // D&D
+  setupDragAndDrop();
+
+  // Undoボタンの初期状態
+  updateUndoButton();
+});
+
+// データ構造移行
+function migrateData(old){
+  if(!old || typeof old !== 'object') old = buildDefaultAppData();
+
+  if(!old.pages){
+    old = {
+      orientation: old.orientation || 'PORTRAIT',
+      sheetZoom: old.sheetZoom || 'FIT',
+      imgBg: old.imgBg || DEFAULT_IMG_BG,
+      labelFontSize: old.labelFontSize || DEFAULT_LABEL_FONT_SIZE,
+      pages: [
+        {
+          layoutMode: DEFAULT_LAYOUT_MODE,
+          gridCols: DEFAULT_GRID_COLS,
+          gridRows: DEFAULT_GRID_ROWS,
+          cardWmm: old.cardWmm || 50,
+          cardHmm: old.cardHmm || 50,
+          cards: old.cards || []
+        }
+      ]
+    };
+  }
+
+  if(!old.sheetZoom) old.sheetZoom = 'FIT';
+  if(!old.imgBg) old.imgBg = DEFAULT_IMG_BG;
+  if(!old.labelFontSize) old.labelFontSize = DEFAULT_LABEL_FONT_SIZE;
+
+  // 全ページ補完
+  old.pages.forEach(p => {
+    if(!p.layoutMode) p.layoutMode = DEFAULT_LAYOUT_MODE;
+    if(!p.gridCols) p.gridCols = DEFAULT_GRID_COLS;
+    if(!p.gridRows) p.gridRows = DEFAULT_GRID_ROWS;
+    if(!p.cardWmm) p.cardWmm = 50;
+    if(!p.cardHmm) p.cardHmm = 50;
+    if(!p.cards) p.cards = [];
+    p.cards.forEach(c => {
+      if(!c) return;
+      if(!c.labelPos) c.labelPos = DEFAULT_LABEL_POS;
+      if(c.labelH === undefined) c.labelH = null;
+      if(c.labelW === undefined) c.labelW = null;
+      if(c.borderColor === undefined) c.borderColor = null;
+      if(c.borderWidth === undefined) c.borderWidth = null;
+      if(c.rotate === undefined) c.rotate = 0;
+      if(c.scale === undefined) c.scale = 1;
+      if(c.x === undefined) c.x = 0;
+      if(c.y === undefined) c.y = 0;
+      if(c.label === undefined) c.label = '';
+      if(c.img === undefined) c.img = null;
+    });
+  });
+
+  return old;
+}
+
+// ------------------------------------
+// UI: Orientation / Zoom / Bg
+// ------------------------------------
+function setOrientation(o){
+  appData.orientation = o;
+  applyOrientationCss();
+  saveData();
+  renderPages();
+}
+function applyOrientationCss(){
+  const isP = (appData.orientation === 'PORTRAIT');
+  const r = document.documentElement;
+  if(isP){
+    r.style.setProperty('--a4-width', '210mm');
+    r.style.setProperty('--a4-height', '297mm');
+    document.getElementById('oPORTRAIT').classList.add('active');
+    document.getElementById('oLANDSCAPE').classList.remove('active');
+    document.getElementById('dynPrintStyle').textContent = `@page { size: A4 portrait; margin:0; }`;
+  }else{
+    r.style.setProperty('--a4-width', '297mm');
+    r.style.setProperty('--a4-height', '210mm');
+    document.getElementById('oPORTRAIT').classList.remove('active');
+    document.getElementById('oLANDSCAPE').classList.add('active');
+    document.getElementById('dynPrintStyle').textContent = `@page { size: A4 landscape; margin:0; }`;
+  }
+}
+
+function setZoomPreset(v){
+  if(v === 'FIT'){
+    appData.sheetZoom = 'FIT';
+  }else{
+    appData.sheetZoom = parseFloat(v);
+  }
+  document.querySelectorAll('#zFIT, #z100, #z125, #z150').forEach(b=>b.classList.remove('active'));
+  const tid = (v==='FIT') ? 'zFIT' : (v===1.0?'z100':(v===1.25?'z125':'z150'));
+  const btn = document.getElementById(tid);
+  if(btn) btn.classList.add('active');
+  saveData();
+  renderPages();
+}
+
+function setImgBg(hex){
+  appData.imgBg = hex;
+  saveData();
+  renderPages();
+}
+function resetImgBg(){
+  appData.imgBg = DEFAULT_IMG_BG;
+  const p = document.getElementById('imgBgPicker');
+  if(p) p.value = normalizeHexColorOr(DEFAULT_IMG_BG, DEFAULT_IMG_BG);
+  saveData();
+  renderPages();
+}
+
+function applyLabelFontSize(){
+  const el = document.getElementById('labelFontSize');
+  let v = parseInt(el.value, 10);
+  if(isNaN(v) || v < 4) v = 14;
+  appData.labelFontSize = v;
+  saveData();
+  renderPages();
+}
+
+// ------------------------------------
+// UI: Pages
+// ------------------------------------
+function renderPages(){
+  const tabs = document.getElementById('pageTabs');
+  tabs.innerHTML = '';
+
+  const ws = document.getElementById('workspace');
+  ws.innerHTML = '';
+
+  // ズーム計算
+  let zVal = 1;
+  if(appData.sheetZoom === 'FIT'){
+    const mmW = (appData.orientation==='PORTRAIT')?210:297;
+    const pxW = mmW * 3.78;
+    const mainW = document.getElementById('main').clientWidth - 40;
+    zVal = Math.min(1, mainW / pxW);
+  }else{
+    zVal = appData.sheetZoom;
+  }
+  document.documentElement.style.setProperty('--sheet-zoom', zVal);
+
+  appData.pages.forEach((pg, i) => {
+    // Tab
+    const btn = document.createElement('button');
+    btn.className = `tab ${i===curP ? 'active':''}`;
+    btn.textContent = `P${i+1}`;
+    btn.onclick = () => { curP = i; renderPages(); updatePageControls(); };
+    tabs.appendChild(btn);
+
+    // Sheet
+    const sheetStage = document.createElement('div');
+    sheetStage.className = 'sheet-stage';
+
+    // Sheet title
+    const st = document.createElement('div');
+    st.className = 'sheet-title';
+    st.innerHTML = `<div>Page ${i+1}</div> <small>A4 ${appData.orientation}</small>`;
+
+    // Sheet content
+    const sheet = document.createElement('div');
+    sheet.className = `sheet ${i===curP ? 'active':''}`;
+    sheet.appendChild(st);
+
+    renderSheetContent(sheet, pg, i);
+
+    sheetStage.appendChild(sheet);
+    if(i === curP) ws.appendChild(sheetStage);
+  });
+}
+
+function renderSheetContent(sheetEl, pg, pIdx){
+  // 1) カードサイズ決定
+  let cw, ch;
+
+  if(pg.layoutMode === 'GRID'){
+    const A4 = (appData.orientation === 'PORTRAIT') ? A4_PORTRAIT : A4_LANDSCAPE;
+    const availW = A4.w - (PAGE_PAD_MM * 2);
+    const availH = A4.h - (PAGE_PAD_MM * 2);
+
+    const cols = pg.gridCols || 3;
+    const rows = pg.gridRows || 3;
+
+    const totalGapW = (cols - 1) * GAP_MM;
+    const totalGapH = (rows - 1) * GAP_MM;
+
+    cw = (availW - totalGapW) / cols;
+    ch = (availH - totalGapH) / rows;
+  } else {
+    cw = pg.cardWmm;
+    ch = pg.cardHmm;
+  }
+
+  const cont = document.createElement('div');
+  cont.className = 'grid-container';
+
+  if(pg.layoutMode === 'GRID'){
+    cont.style.gridTemplateColumns = `repeat(${pg.gridCols}, ${cw}mm)`;
+    cont.style.gridTemplateRows = `repeat(${pg.gridRows}, ${ch}mm)`;
+  } else {
+    cont.style.gridTemplateColumns = `repeat(auto-fill, ${cw}mm)`;
+    cont.style.gridTemplateRows = `repeat(auto-fill, ${ch}mm)`;
+  }
+  cont.style.gap = `${GAP_MM}mm`;
+
+  // ★AUTOでも必ず「＋追加」枠を1つ出す（cards=0でも操作可能）
+  let renderCount;
+  if(pg.layoutMode === 'GRID'){
+    renderCount = (pg.gridCols * pg.gridRows);
+  } else {
+    renderCount = pg.cards.length + 1;
+  }
+
+  for(let k=0; k<renderCount; k++){
+    const isAdder = (pg.layoutMode !== 'GRID') && (k === pg.cards.length);
+    const cData = isAdder ? null : pg.cards[k]; // 末尾は必ず「追加」扱い
+
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.style.width = `${cw}mm`;
+    cell.style.height = `${ch}mm`;
+
+    // D&D用 data属性
+    cell.dataset.pIdx = String(pIdx); // -> data-p-idx
+    cell.dataset.cIdx = String(k);    // -> data-c-idx
+
+    if(cData){
+      const bc = cData.borderColor || DEFAULT_BORDER_COLOR;
+      const bw = (cData.borderWidth !== null && cData.borderWidth !== undefined) ? cData.borderWidth : DEFAULT_BORDER_WIDTH;
+      cell.style.setProperty('--border-c', bc);
+      cell.style.setProperty('--border-w', `${bw}px`);
+
+      if(cData.labelH !== null && cData.labelH !== undefined) cell.style.setProperty('--label-h', `${cData.labelH}%`);
+      if(cData.labelW !== null && cData.labelW !== undefined) cell.style.setProperty('--label-w', `${cData.labelW}%`);
+    } else {
+      // 空枠（＋）
+      cell.style.setProperty('--border-c', 'rgba(0,0,0,0.1)');
+      cell.style.borderStyle = 'dashed';
+      if(isAdder) cell.classList.add('adder');
+    }
+
+    const pos = (cData && cData.labelPos) ? cData.labelPos : DEFAULT_LABEL_POS;
+    cell.classList.add(`pos-${pos}`);
+
+    if(cData){
+      const imgArea = document.createElement('div');
+      imgArea.className = 'image-area';
+      imgArea.style.backgroundColor = appData.imgBg;
+
+      if(cData.img){
+        const img = document.createElement('img');
+        img.src = cData.img;
+        const tr = `translate(${cData.x}px, ${cData.y}px) rotate(${cData.rotate}deg) scale(${cData.scale})`;
+        img.style.transform = tr;
+        imgArea.appendChild(img);
+      } else {
+        const ph = document.createElement('span');
+        ph.textContent = 'No Image';
+        ph.style.fontSize = '10px';
+        ph.style.color = '#ccc';
+        imgArea.appendChild(ph);
+      }
+
+      const lblArea = document.createElement('div');
+      lblArea.className = 'label-area';
+      const span = document.createElement('span');
+      span.textContent = cData.label || '';
+      lblArea.appendChild(span);
+
+      // posに応じてDOM順序を入れ替え（CSSでorder制御しない）
+      if(pos === 'top' || pos === 'left'){
+        cell.appendChild(lblArea);
+        cell.appendChild(imgArea);
+      } else {
+        cell.appendChild(imgArea);
+        cell.appendChild(lblArea);
+      }
+
+      cell.onclick = (e) => {
+        e.stopPropagation();
+        openEditor(pIdx, k);
+      };
+
+      requestAnimationFrame(() => autoFitText(lblArea, span));
+    } else {
+      // 空枠（＋）
+      const ph = document.createElement('div');
+      ph.style.display='flex';
+      ph.style.alignItems='center';
+      ph.style.justifyContent='center';
+      ph.style.width='100%';
+      ph.style.height='100%';
+      ph.innerHTML = '<span style="font-size:24px; color:rgba(0,0,0,0.1); font-weight:900;">＋</span>';
+      cell.appendChild(ph);
+
+      cell.onclick = (e) => {
+        e.stopPropagation();
+        addEmptyCardAt(pIdx, k);
+        openEditor(pIdx, k);
+      };
+    }
+
+    cont.appendChild(cell);
+  }
+
+  sheetEl.appendChild(cont);
+}
+
+function autoFitText(container, span){
+  const maxW = container.clientWidth;
+  const maxH = container.clientHeight;
+  if(!maxW || !maxH) return;
+
+  let size = appData.labelFontSize;
+  span.style.fontSize = size + 'px';
+
+  while( (span.offsetWidth > maxW || span.offsetHeight > maxH) && size > LABEL_AUTOFIT_MIN ){
+    size--;
+    span.style.fontSize = size + 'px';
+  }
+}
+
+function updatePageControls(){
+  const pg = appData.pages[curP];
+  const lm = document.getElementById('layoutMode');
+  const gc = document.getElementById('gridControls');
+  const sc = document.getElementById('sizeControls');
+
+  lm.value = pg.layoutMode;
+
+  if(pg.layoutMode === 'GRID'){
+    gc.style.display = 'flex';
+    sc.style.display = 'none';
+    document.getElementById('gridCols').value = pg.gridCols;
+    document.getElementById('gridRows').value = pg.gridRows;
+  } else {
+    gc.style.display = 'none';
+    sc.style.display = 'flex';
+    document.getElementById('cardWmm').value = pg.cardWmm;
+    document.getElementById('cardHmm').value = pg.cardHmm;
+    document.getElementById('sizePreset').value = findSizePreset(pg.cardWmm, pg.cardHmm);
+  }
+}
+
+function findSizePreset(w, h){
+  const map = {
+    '50x50': [50,50], '32x32': [32,32], '44x44': [44,44],
+    '50x35': [50,35], '80x60': [80,60], '80x34': [80,34], '100x18': [100,18]
+  };
+  for(let k in map){
+    if(map[k][0]==w && map[k][1]==h) return k;
+  }
+  return 'custom';
+}
+
+function addPage(){
+  appData.pages.push({
+    layoutMode: DEFAULT_LAYOUT_MODE,
+    gridCols: DEFAULT_GRID_COLS,
+    gridRows: DEFAULT_GRID_ROWS,
+    cardWmm: 50,
+    cardHmm: 50,
+    cards: []
+  });
+  curP = appData.pages.length - 1;
+  saveData();
+  renderPages();
+  updatePageControls();
+}
+
+function deleteCurrentPage(){
+  if(appData.pages.length <= 1){
+    alert("最後の1ページは削除できません");
+    return;
+  }
+  if(!confirm("現在のページを削除しますか？")) return;
+
+  appData.pages.splice(curP, 1);
+  if(curP >= appData.pages.length) curP = appData.pages.length - 1;
+  saveData();
+  renderPages();
+  updatePageControls();
+}
+
+function onLayoutModeChange(v){
+  appData.pages[curP].layoutMode = v;
+  saveData();
+  renderPages();
+  updatePageControls();
+}
+
+function applyGridForCurrentPage(){
+  const c = parseInt(document.getElementById('gridCols').value, 10);
+  const r = parseInt(document.getElementById('gridRows').value, 10);
+  if(c<1 || r<1) return;
+  appData.pages[curP].gridCols = c;
+  appData.pages[curP].gridRows = r;
+  saveData();
+  renderPages();
+}
+
+function onSizePresetChange(v){
+  if(v === 'custom') return;
+  const map = {
+    '50x50': [50,50], '32x32': [32,32], '44x44': [44,44],
+    '50x35': [50,35], '80x60': [80,60], '80x34': [80,34], '100x18': [100,18]
+  };
+  if(map[v]){
+    document.getElementById('cardWmm').value = map[v][0];
+    document.getElementById('cardHmm').value = map[v][1];
+  }
+}
+
+function applyCardSizeForCurrentPage(){
+  const w = parseInt(document.getElementById('cardWmm').value, 10);
+  const h = parseInt(document.getElementById('cardHmm').value, 10);
+  if(w < 5 || h < 5) return;
+
+  appData.pages[curP].cardWmm = w;
+  appData.pages[curP].cardHmm = h;
+  saveData();
+  renderPages();
+}
+
+// GRID/AUTO 共通: 空きスロットクリック時にカードデータを生成
+function addEmptyCardAt(pIdx, cIdx){
+  const pg = appData.pages[pIdx];
+  while(pg.cards.length <= cIdx){
+    pg.cards.push(null);
+  }
+  pg.cards[cIdx] = createNewCardData();
+  saveData();
+}
+
+function createNewCardData(){
+  return {
+    img: null,
+    x:0, y:0, scale:1, rotate:0,
+    label: '',
+    labelPos: DEFAULT_LABEL_POS,
+    labelH: null,
+    labelW: null,
+    borderColor: null,
+    borderWidth: null
+  };
+}
+
+// ------------------------------------
+// Editor Logic
+// ------------------------------------
+function openEditor(pIdx, cIdx){
+  curP = pIdx;
+  curIdx = cIdx;
+  const c = appData.pages[pIdx].cards[cIdx];
+  if(!c) return;
+
+  tempState = JSON.parse(JSON.stringify(c));
+
+  document.getElementById('fL').value = tempState.label;
+  document.getElementById('fS').value = tempState.scale;
+  document.getElementById('fX').value = tempState.x;
+  document.getElementById('fY').value = tempState.y;
+
+  document.getElementById('labelPosSelect').value = tempState.labelPos || 'bottom';
+
+  const defH = DEFAULT_LABEL_H_PERCENT;
+  const defW = DEFAULT_LABEL_W_PERCENT;
+  const curH = (tempState.labelH !== null && tempState.labelH !== undefined) ? tempState.labelH : defH;
+  const curW = (tempState.labelW !== null && tempState.labelW !== undefined) ? tempState.labelW : defW;
+  document.getElementById('labelHRange').value = curH;
+  document.getElementById('labelHNum').value = curH;
+  document.getElementById('labelWRange').value = curW;
+  document.getElementById('labelWNum').value = curW;
+
+  const bcPicker = document.getElementById('borderColorPicker');
+  const bwInput = document.getElementById('borderWidthInput');
+
+  bcPicker.value = normalizeHexColorOr(tempState.borderColor, DEFAULT_BORDER_COLOR);
+  bwInput.value = (tempState.borderWidth !== null && tempState.borderWidth !== undefined) ? tempState.borderWidth : DEFAULT_BORDER_WIDTH;
+
+  updatePreview();
+
+  document.getElementById('editorModal').style.display = 'flex';
+}
+
+function closeModal(){
+  document.getElementById('editorModal').style.display = 'none';
+  curIdx = null;
+}
+
+function saveCard(){
+  if(curIdx === null) return;
+  appData.pages[curP].cards[curIdx] = JSON.parse(JSON.stringify(tempState));
+  saveData();
+  renderPages();
+  closeModal();
+}
+
+function updatePreview(){
+  const card = preview.cardEl;
+  card.className = `preview-card pos-${tempState.labelPos}`;
+
+  const isVert = (tempState.labelPos === 'top' || tempState.labelPos === 'bottom');
+
+  preview.labelEl.style.height = '';
+  preview.labelEl.style.width = '';
+  preview.labelEl.style.borderTop = '';
+  preview.labelEl.style.borderBottom = '';
+  preview.labelEl.style.borderLeft = '';
+  preview.labelEl.style.borderRight = '';
+
+  if(isVert){
+    const hVal = (tempState.labelH !== null && tempState.labelH !== undefined) ? tempState.labelH : DEFAULT_LABEL_H_PERCENT;
+    preview.labelEl.style.height = `${hVal}%`;
+    if(tempState.labelPos==='bottom') preview.labelEl.style.borderTop = '2px solid rgba(0,0,0,0.65)';
+    else preview.labelEl.style.borderBottom = '2px solid rgba(0,0,0,0.65)';
+  } else {
+    const wVal = (tempState.labelW !== null && tempState.labelW !== undefined) ? tempState.labelW : DEFAULT_LABEL_W_PERCENT;
+    preview.labelEl.style.width = `${wVal}%`;
+    if(tempState.labelPos==='left') preview.labelEl.style.borderRight = '2px solid rgba(0,0,0,0.65)';
+    else preview.labelEl.style.borderLeft = '2px solid rgba(0,0,0,0.65)';
+  }
+
+  const box = preview.box;
+  const bColor = (tempState.borderColor !== null && tempState.borderColor !== undefined) ? tempState.borderColor : DEFAULT_BORDER_COLOR;
+  const bWidth = (tempState.borderWidth !== null && tempState.borderWidth !== undefined) ? tempState.borderWidth : DEFAULT_BORDER_WIDTH;
+
+  box.style.setProperty('--preview-border-c', bColor);
+  box.style.setProperty('--preview-border-w', `${bWidth}px`);
+
+  preview.labelEl.textContent = document.getElementById('fL').value;
+  tempState.label = document.getElementById('fL').value;
+
+  preview.imgAreaEl.style.backgroundColor = appData.imgBg;
+
+  if(tempState.img){
+    preview.imgEl.src = tempState.img;
+    preview.imgEl.style.display = 'block';
+    preview.phEl.style.display = 'none';
+
+    const tr = `translate(${tempState.x}px, ${tempState.y}px) rotate(${tempState.rotate}deg) scale(${tempState.scale})`;
+    preview.imgEl.style.transform = tr;
+  } else {
+    preview.imgEl.style.display = 'none';
+    preview.phEl.style.display = 'flex';
+  }
+}
+
+// ------------------------------------
+// Editor Inputs
+// ------------------------------------
+function wireRangeInputs(){
+  const sync = (id, key) => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+      tempState[key] = parseFloat(el.value);
+      updatePreview();
+    });
+  };
+  sync('fS', 'scale');
+  sync('fX', 'x');
+  sync('fY', 'y');
+
+  document.getElementById('fL').addEventListener('input', () => updatePreview());
+}
+
+function wireLabelSizeInputs(){
+  const rh = document.getElementById('labelHRange');
+  const nh = document.getElementById('labelHNum');
+  const onH = (e) => {
+    const v = parseInt(e.target.value, 10);
+    rh.value = v; nh.value = v;
+    tempState.labelH = v;
+    updatePreview();
+  };
+  rh.addEventListener('input', onH);
+  nh.addEventListener('input', onH);
+
+  const rw = document.getElementById('labelWRange');
+  const nw = document.getElementById('labelWNum');
+  const onW = (e) => {
+    const v = parseInt(e.target.value, 10);
+    rw.value = v; nw.value = v;
+    tempState.labelW = v;
+    updatePreview();
+  };
+  rw.addEventListener('input', onW);
+  nw.addEventListener('input', onW);
+}
+
+function wireSettingsInputs(){
+  document.getElementById('labelPosSelect').addEventListener('change', (e)=>{
+    tempState.labelPos = e.target.value;
+    updatePreview();
+  });
+
+  document.getElementById('borderColorPicker').addEventListener('input', (e)=>{
+    tempState.borderColor = e.target.value;
+    updatePreview();
+  });
+
+  document.getElementById('borderWidthInput').addEventListener('input', (e)=>{
+    let v = parseInt(e.target.value, 10);
+    if(isNaN(v)) v = DEFAULT_BORDER_WIDTH;
+    if(v<0) v=0;
+    tempState.borderWidth = v;
+    updatePreview();
+  });
+}
+
+function resetBorderToDefault(){
+  tempState.borderColor = null;
+  tempState.borderWidth = null;
+  document.getElementById('borderColorPicker').value = normalizeHexColorOr(DEFAULT_BORDER_COLOR, DEFAULT_BORDER_COLOR);
+  document.getElementById('borderWidthInput').value = DEFAULT_BORDER_WIDTH;
+  updatePreview();
+}
+
+// ------------------------------------
+// Image Manip / Fit Logic
+// ------------------------------------
+function rotateImage90(){
+  tempState.rotate = (tempState.rotate + 90) % 360;
+  updatePreview();
+}
+function removeImage(){
+  if(confirm("画像を削除しますか？")){
+    tempState.img = null;
+    tempState.x = 0;
+    tempState.y = 0;
+    tempState.scale = 1;
+    tempState.rotate = 0;
+    updatePreview();
+  }
+}
+function resetTransform(){
+  tempState.x = 0;
+  tempState.y = 0;
+  tempState.scale = 1;
+  tempState.rotate = 0;
+  document.getElementById('fS').value = 1;
+  document.getElementById('fX').value = 0;
+  document.getElementById('fY').value = 0;
+  updatePreview();
+}
+function centerImage(){
+  tempState.x = 0;
+  tempState.y = 0;
+  document.getElementById('fX').value = 0;
+  document.getElementById('fY').value = 0;
+  updatePreview();
+}
+
+// Editor内の「枠に合わせる」
+function fitToFrame(){
+  if(!tempState.img) return;
+
+  const areaW = preview.imgAreaEl.clientWidth;
+  const areaH = preview.imgAreaEl.clientHeight;
+  if(!areaW || !areaH) return;
+
+  const i = new Image();
+  i.onload = () => {
+    const nw = i.naturalWidth;
+    const nh = i.naturalHeight;
+
+    const isRot = (Math.abs(tempState.rotate) % 180 === 90);
+    const w = isRot ? nh : nw;
+    const h = isRot ? nw : nh;
+
+    const sW = areaW / w;
+    const sH = areaH / h;
+    const scale = Math.max(sW, sH);
+
+    tempState.scale = parseFloat(scale.toFixed(3));
+    tempState.x = 0;
+    tempState.y = 0;
+
+    document.getElementById('fS').value = tempState.scale;
+    document.getElementById('fX').value = 0;
+    document.getElementById('fY').value = 0;
+    updatePreview();
+  };
+  i.src = tempState.img;
+}
+
+// ------------------------------------
+// Image File Handling
+// ------------------------------------
+function openFilePicker(){ document.getElementById('fIn').click(); }
+function openCameraPicker(){ document.getElementById('fCam').click(); }
+
+function hImg(input){
+  if(input.files && input.files[0]){
+    // エディタ取り込み
+    handleImageFile(input.files[0], { mode: 'EDITOR' });
+    input.value = '';
+  }
+}
+
+/**
+ * handleImageFile(file, opts)
+ * opts:
+ *   - mode: 'DROP' | 'EDITOR'
+ *   - targetPageIdx: number (DROP時必須)
+ *   - targetCardIdx: number (DROP時必須)
+ */
+function handleImageFile(file, opts){
+  const mode = opts?.mode || 'EDITOR';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    compressImage(e.target.result, (dataUrl) => {
+      if(mode === 'DROP'){
+        const pIdx = opts.targetPageIdx;
+        const cIdx = opts.targetCardIdx;
+
+        // 確実に配列を用意
+        const pg = appData.pages[pIdx];
+        while(pg.cards.length <= cIdx){
+          pg.cards.push(null);
+        }
+
+        if(!pg.cards[cIdx]){
+          pg.cards[cIdx] = createNewCardData();
+        }
+        const c = pg.cards[cIdx];
+        c.img = dataUrl;
+
+        // D&D：本物の自動フィット（image-area 実寸で cover）
+        saveData();
+        renderPages();
+
+        requestAnimationFrame(() => {
+          autoFitCardImageDOM(pIdx, cIdx).then(() => {
+            saveData();
+            renderPages();
+          });
+        });
+
+      } else {
+        // エディタへロード
+        tempState.img = dataUrl;
+
+        // 変数代入バグ修正
+        tempState.x = 0;
+        tempState.y = 0;
+        tempState.rotate = 0;
+        tempState.scale = 1;
+
+        document.getElementById('fS').value = 1;
+        document.getElementById('fX').value = 0;
+        document.getElementById('fY').value = 0;
+        updatePreview();
+
+        // 画像読込後にフィット
+        setTimeout(fitToFrame, 80);
+      }
+    });
+  };
+  reader.readAsDataURL(file);
+}
+
+// 画像圧縮
+function compressImage(srcBase64, cb){
+  const img = new Image();
+  img.onload = () => {
+    let w = img.width;
+    let h = img.height;
+    if(w > h){
+      if(w > IMG_MAX_LONG_EDGE){
+        h = Math.round(h * (IMG_MAX_LONG_EDGE/w));
+        w = IMG_MAX_LONG_EDGE;
+      }
+    }else{
+      if(h > IMG_MAX_LONG_EDGE){
+        w = Math.round(w * (IMG_MAX_LONG_EDGE/h));
+        h = IMG_MAX_LONG_EDGE;
+      }
+    }
+    const cvs = document.createElement('canvas');
+    cvs.width = w;
+    cvs.height = h;
+    const ctx = cvs.getContext('2d');
+    ctx.drawImage(img, 0,0,w,h);
+    cb(cvs.toDataURL('image/jpeg', IMG_JPEG_QUALITY));
+  };
+  img.src = srcBase64;
+}
+
+/**
+ * D&D用：DOM上の image-area 実寸を使って cover 計算する “本物の自動フィット”
+ */
+function autoFitCardImageDOM(pIdx, cIdx){
+  return new Promise((resolve) => {
+    const pg = appData.pages[pIdx];
+    const c = pg.cards[cIdx];
+    if(!c || !c.img){
+      resolve();
+      return;
+    }
+
+    const useCell = document.querySelector(`.cell[data-p-idx="${pIdx}"][data-c-idx="${cIdx}"]`);
+    if(!useCell){
+      c.x = 0; c.y = 0; c.rotate = 0; c.scale = 1;
+      resolve();
+      return;
+    }
+
+    const imgArea = useCell.querySelector('.image-area');
+    if(!imgArea){
+      c.x = 0; c.y = 0; c.rotate = 0; c.scale = 1;
+      resolve();
+      return;
+    }
+
+    const areaW = imgArea.clientWidth;
+    const areaH = imgArea.clientHeight;
+    if(!areaW || !areaH){
+      requestAnimationFrame(() => resolve(autoFitCardImageDOM(pIdx, cIdx)));
+      return;
+    }
+
+    const i = new Image();
+    i.onload = () => {
+      const nw = i.naturalWidth;
+      const nh = i.naturalHeight;
+
+      const rot = (c.rotate || 0) % 360;
+      const isRot = (Math.abs(rot) % 180 === 90);
+      const w = isRot ? nh : nw;
+      const h = isRot ? nw : nh;
+
+      const sW = areaW / w;
+      const sH = areaH / h;
+      const scale = Math.max(sW, sH);
+
+      c.scale = parseFloat(scale.toFixed(3));
+      c.x = 0;
+      c.y = 0;
+      c.rotate = 0;
+
+      resolve();
+    };
+    i.src = c.img;
+  });
+}
+
+// ------------------------------------
+// Preview Interactions (Pointer)
+// ------------------------------------
+function wirePreviewPointerEvents(){
+  const area = preview.imgAreaEl;
+
+  area.addEventListener('pointerdown', e => {
+    preview.pointers.set(e.pointerId, e);
+    area.setPointerCapture(e.pointerId);
+
+    if(preview.pointers.size === 1){
+      preview.isDragging = true;
+      preview.dragStartX = e.clientX;
+      preview.dragStartY = e.clientY;
+      preview.baseX = tempState.x;
+      preview.baseY = tempState.y;
+    } else if(preview.pointers.size === 2){
+      preview.isDragging = false;
+      const pts = Array.from(preview.pointers.values());
+      preview.pinchStartDist = getDist(pts[0], pts[1]);
+      preview.pinchStartScale = tempState.scale;
+    }
+  });
+
+  area.addEventListener('pointermove', e => {
+    if(!preview.pointers.has(e.pointerId)) return;
+    preview.pointers.set(e.pointerId, e);
+
+    if(preview.pointers.size === 1 && preview.isDragging){
+      const dx = e.clientX - preview.dragStartX;
+      const dy = e.clientY - preview.dragStartY;
+      tempState.x = preview.baseX + dx;
+      tempState.y = preview.baseY + dy;
+
+      document.getElementById('fX').value = tempState.x;
+      document.getElementById('fY').value = tempState.y;
+      updatePreview();
+
+    } else if(preview.pointers.size === 2){
+      const pts = Array.from(preview.pointers.values());
+      const dist = getDist(pts[0], pts[1]);
+      if(preview.pinchStartDist > 0){
+        const ratio = dist / preview.pinchStartDist;
+        let newS = preview.pinchStartScale * ratio;
+        if(newS < 0.1) newS = 0.1;
+        if(newS > 5) newS = 5;
+        tempState.scale = parseFloat(newS.toFixed(3));
+
+        document.getElementById('fS').value = tempState.scale;
+        updatePreview();
+      }
+    }
+  });
+
+  const end = (e) => {
+    preview.pointers.delete(e.pointerId);
+    if(preview.pointers.size < 2) preview.pinchStartDist = 0;
+    if(preview.pointers.size === 0) preview.isDragging = false;
+  };
+  area.addEventListener('pointerup', end);
+  area.addEventListener('pointercancel', end);
+
+  area.addEventListener('wheel', e => {
+    e.preventDefault();
+    const d = e.deltaY * -0.001;
+    let s = tempState.scale + d;
+    if(s < 0.1) s = 0.1;
+    if(s > 5) s = 5;
+    tempState.scale = parseFloat(s.toFixed(3));
+    document.getElementById('fS').value = tempState.scale;
+    updatePreview();
+  }, {passive:false});
+}
+
+function getDist(p1, p2){
+  return Math.sqrt(Math.pow(p1.clientX - p2.clientX, 2) + Math.pow(p1.clientY - p2.clientY, 2));
+}
+
+// ------------------------------------
+// D&D Logic（本物フィット連動）
+// ------------------------------------
+function setupDragAndDrop(){
+  const ws = document.body;
+
+  ['dragenter','dragover','dragleave','drop'].forEach(ev => {
+    ws.addEventListener(ev, e => {
+      e.preventDefault();
+      e.stopPropagation();
+    }, false);
+  });
+
+  document.getElementById('main').addEventListener('dragover', e => {
+    const cell = e.target.closest('.cell');
+    if(cell){
+      document.querySelectorAll('.cell.file-over').forEach(el=>el.classList.remove('file-over'));
+      cell.classList.add('file-over');
+    }
+  });
+
+  document.getElementById('main').addEventListener('dragleave', e => {
+    const cell = e.target.closest('.cell');
+    if(cell){
+      cell.classList.remove('file-over');
+    }
+  });
+
+  document.getElementById('main').addEventListener('drop', e => {
+    document.querySelectorAll('.cell.file-over').forEach(el=>el.classList.remove('file-over'));
+
+    const cell = e.target.closest('.cell');
+    if(cell && e.dataTransfer.files.length > 0){
+      const pIdx = parseInt(cell.dataset.pIdx, 10);
+      const cIdx = parseInt(cell.dataset.cIdx, 10);
+
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      if(files.length === 0) return;
+
+      // 1枚目 -> ターゲットへ
+      handleImageFile(files[0], { mode:'DROP', targetPageIdx: pIdx, targetCardIdx: cIdx });
+
+      // 2枚目以降 -> AUTOなら末尾へ追加
+      if(appData.pages[pIdx].layoutMode === 'AUTO' && files.length > 1){
+        let chain = Promise.resolve();
+        for(let i=1; i<files.length; i++){
+          chain = chain.then(() => new Promise((res) => {
+            const newIdx = appData.pages[pIdx].cards.length;
+            handleImageFile(files[i], { mode:'DROP', targetPageIdx: pIdx, targetCardIdx: newIdx });
+            setTimeout(res, 180);
+          }));
+        }
+      }
+    }
+  });
+}
+
+// ------------------------------------
+// Print / Export
+// ------------------------------------
+function printAllSheets(){
+  window.print();
+}
+
+function exportJson(){
+  const str = JSON.stringify(appData, null, 2);
+  const blob = new Blob([str], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pecs_backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+function importJson(input){
+  if(input.files && input.files[0]){
+    const r = new FileReader();
+    r.onload = (e) => {
+      try{
+        const d = JSON.parse(e.target.result);
+        appData = migrateData(d);
+        curP = 0;
+        curIdx = null;
+        closeModal();
+        applyOrientationCss();
+
+        const picker = document.getElementById('imgBgPicker');
+        if(picker) picker.value = normalizeHexColorOr(appData.imgBg || DEFAULT_IMG_BG, DEFAULT_IMG_BG);
+
+        const fs = document.getElementById('labelFontSize');
+        if(fs) fs.value = String(appData.labelFontSize || DEFAULT_LABEL_FONT_SIZE);
+
+        saveData();
+        renderPages();
+        updatePageControls();
+        alert("読み込みました");
+      }catch(_){
+        alert("データ形式が正しくありません");
+      }
+    };
+    r.readAsText(input.files[0]);
+    input.value = '';
+  }
+}
+
+// ------------------------------------
+// Reset / Undo（安全化）
+// ------------------------------------
+function updateUndoButton(){
+  const b = document.getElementById('undoBtn');
+  if(!b) return;
+  b.disabled = !sessionStorage.getItem(UNDO_KEY);
+}
+
+function undoReset(){
+  const raw = sessionStorage.getItem(UNDO_KEY);
+  if(!raw){
+    alert("元に戻せる状態がありません");
+    return;
+  }
+  if(!confirm("直前の状態に戻しますか？\n※現在の状態は上書きされます。")) return;
+
+  try{
+    appData = migrateData(JSON.parse(raw));
+    curP = Math.min(curP, appData.pages.length - 1);
+    curIdx = null;
+
+    closeModal();
+    applyOrientationCss();
+
+    const picker = document.getElementById('imgBgPicker');
+    if(picker) picker.value = normalizeHexColorOr(appData.imgBg || DEFAULT_IMG_BG, DEFAULT_IMG_BG);
+
+    const fs = document.getElementById('labelFontSize');
+    if(fs) fs.value = String(appData.labelFontSize || DEFAULT_LABEL_FONT_SIZE);
+
+    saveData();
+    renderPages();
+    updatePageControls();
+
+    updateUndoButton();
+  }catch(_){
+    alert("復元に失敗しました（データが壊れている可能性があります）");
+  }
+}
+
+function resetData(){
+  if(!confirm("リセットしますか？\n※カード内容が消えます。")) return;
+
+  // Undo用に直前状態を一時保存（同一タブ内のみ）
+  try{
+    sessionStorage.setItem(UNDO_KEY, JSON.stringify(appData));
+  }catch(_){}
+  updateUndoButton();
+
+  // 任意：バックアップ
+  if(confirm("リセット前にJSONバックアップを保存しますか？")){
+    exportJson();
+  }
+
+  const full = confirm(
+    "リセット範囲を選べます。\n" +
+    "OK：ページ数・設定も含めて全部初期化\n" +
+    "キャンセル：カード内容だけ削除（ページ構成/設定は維持）"
+  );
+
+  if(full){
+    appData = migrateData(buildDefaultAppData());
+    curP = 0;
+  }else{
+    appData.pages.forEach(pg => { pg.cards = []; });
+    appData = migrateData(appData);
+    curP = Math.min(curP, appData.pages.length - 1);
+  }
+
+  curIdx = null;
+  closeModal();
+  applyOrientationCss();
+
+  const picker = document.getElementById('imgBgPicker');
+  if(picker) picker.value = normalizeHexColorOr(appData.imgBg || DEFAULT_IMG_BG, DEFAULT_IMG_BG);
+
+  const fs = document.getElementById('labelFontSize');
+  if(fs) fs.value = String(appData.labelFontSize || DEFAULT_LABEL_FONT_SIZE);
+
+  saveData();
+  renderPages();
+  updatePageControls();
+
+  alert("初期化しました。必要なら「元に戻す」で直前の状態に復元できます。");
+}
+
+// ------------------------------------
+// Utils
+// ------------------------------------
+function saveData(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+}
+
+function normalizeHexColorOr(c, def){
+  if(!c) return def;
+  if(c.startsWith('#') && (c.length === 7 || c.length === 4)) return c;
+  return def;
+}
+</script>
+</body>
+</html>
