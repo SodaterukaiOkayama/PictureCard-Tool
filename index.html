@@ -905,6 +905,16 @@
           <input type="number" id="cardHmm" min="5" max="200" step="1" style="width:78px" />
           <button class="btn small primary" type="button" id="applySizeBtn" onclick="applyCardSizeForCurrentPage()">適用</button>
         </div>
+
+        <!-- ★追加：ページ全体（全カード）の境界線 ON/OFF -->
+        <div class="field" id="pageDividerControls">
+          <span class="label">境界線（全カード）</span>
+          <select id="pageDividerMode" onchange="onPageDividerModeChange(this.value)">
+            <option value="CARD">各カード設定</option>
+            <option value="ON">全てON</option>
+            <option value="OFF">全てOFF</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -1010,6 +1020,19 @@
             <div class="hint">※ 見た目と印刷に反映されます。</div>
           </div>
 
+          <!-- 既存：カード個別の境界線（※ページ設定が上書きしている場合は無効化） -->
+          <div style="margin-bottom:12px;">
+            <div style="font-weight:1000; font-size:12px; margin-bottom:8px;">境界線（画像とキャプションの間）</div>
+            <div class="formgrid">
+              <div>表示</div>
+              <select id="dividerToggle">
+                <option value="on">ON</option>
+                <option value="off">OFF</option>
+              </select>
+            </div>
+            <div class="hint" id="dividerToggleHint">カードごとに保存されます。</div>
+          </div>
+
           <div style="margin-bottom:12px;">
             <div style="font-weight:1000; font-size:12px; margin-bottom:8px;">キャプション枠の大きさ</div>
             <div class="formgrid3">
@@ -1049,14 +1072,12 @@
 
 <script>
 /* =========================
-   フルコード（改善版 v5）
-   - スマホUI：タイトル縮小＋「レイアウト」「出力/保存」を並列（レスポンシブ）
-   - 画像が右下の見えない位置に出る問題：
-       画像の基準を「中央基準」に統一（transformに translate(-50%,-50%) を追加）
-       既存データは自動で座標移行（旧方式の見た目を崩さない）
-   - AUTOでも必ず「＋追加」枠を1つ表示
-   - 印刷時は「＋追加」枠を非表示
-   - D&Dの“本物の自動フィット”維持
+   フルコード（改善版 v7）
+   - ★追加：ページ全体（そのページ内の全カード）の境界線ON/OFF
+     ページバー「境界線（全カード）」：
+       - 各カード設定（カードごとのON/OFFが有効）
+       - 全てON（ページ内の境界線を強制ON）
+       - 全てOFF（ページ内の境界線を強制OFF）
    ========================= */
 
 const STORAGE_KEY = 'pecs_cards_v4_pages_layout_labelratio'; // 既存データ互換のためキー維持
@@ -1083,6 +1104,8 @@ const DEFAULT_LABEL_FONT_SIZE = 14;
 const DEFAULT_BORDER_COLOR = '#000000';
 const DEFAULT_BORDER_WIDTH = 2;
 const DEFAULT_LABEL_POS = 'bottom';
+const DEFAULT_DIVIDER_ON = true; // カード個別の既定
+const DEFAULT_PAGE_DIVIDER_MODE = 'CARD'; // ★追加：ページ境界線モード（CARD/ON/OFF）
 
 // レイアウトモード
 const DEFAULT_LAYOUT_MODE = 'AUTO'; // 'AUTO' or 'GRID'
@@ -1110,6 +1133,7 @@ function buildDefaultAppData(){
         gridRows: DEFAULT_GRID_ROWS,
         cardWmm: 50,
         cardHmm: 50,
+        dividerMode: DEFAULT_PAGE_DIVIDER_MODE, // ★追加
         cards: []
       }
     ]
@@ -1133,7 +1157,8 @@ let tempState = {
   labelH: null, // number(%)
   labelW: null, // number(%)
   borderColor: null,
-  borderWidth: null
+  borderWidth: null,
+  dividerOn: DEFAULT_DIVIDER_ON // カード個別
 };
 
 // プレビュー操作用
@@ -1228,6 +1253,7 @@ function migrateData(old){
           gridRows: DEFAULT_GRID_ROWS,
           cardWmm: old.cardWmm || 50,
           cardHmm: old.cardHmm || 50,
+          dividerMode: DEFAULT_PAGE_DIVIDER_MODE, // ★追加
           cards: old.cards || []
         }
       ]
@@ -1246,6 +1272,7 @@ function migrateData(old){
     if(!p.gridRows) p.gridRows = DEFAULT_GRID_ROWS;
     if(!p.cardWmm) p.cardWmm = 50;
     if(!p.cardHmm) p.cardHmm = 50;
+    if(!p.dividerMode) p.dividerMode = DEFAULT_PAGE_DIVIDER_MODE; // ★追加
     if(!p.cards) p.cards = [];
     p.cards.forEach(c => {
       if(!c) return;
@@ -1260,6 +1287,9 @@ function migrateData(old){
       if(c.y === undefined) c.y = 0;
       if(c.label === undefined) c.label = '';
       if(c.img === undefined) c.img = null;
+
+      // 旧データはON扱い
+      if(c.dividerOn === undefined) c.dividerOn = DEFAULT_DIVIDER_ON;
     });
   });
 
@@ -1268,9 +1298,6 @@ function migrateData(old){
 
 // ------------------------------------
 // ★座標移行（v1 → v2）
-// 旧：left/top=50% + translate(x,y)... で「画像の左上が中心」になりやすかった
-// 新：translate(-50%,-50%) を必ず入れて「画像の中心が中心」になる方式へ統一
-// 旧の見た目を維持するため、x,y を + (naturalW/2, naturalH/2) して変換する
 // ------------------------------------
 async function migrateCoordinatesToCenteredIfNeeded(){
   if((appData.coordVer || 1) >= COORD_VER_LATEST) return false;
@@ -1293,7 +1320,6 @@ async function migrateCoordinatesToCenteredIfNeeded(){
     pg.cards.forEach(c => {
       if(!c) return;
       if(!c.img){
-        // 画像なしはそのまま（中央基準でも差異が出ない）
         return;
       }
       tasks.push(loadSize(c.img).then(({w,h}) => {
@@ -1319,8 +1345,19 @@ function makeCenteredTransform(x, y, rotate, scale){
   const yy = Number(y) || 0;
   const rr = Number(rotate) || 0;
   const ss = (Number(scale) || 1);
-  // ★必ず translate(-50%,-50%) を入れて「中央が中心」になるようにする
   return `translate(-50%, -50%) translate(${xx}px, ${yy}px) rotate(${rr}deg) scale(${ss})`;
+}
+
+// ------------------------------------
+// ★境界線：ページ/カードの実効値
+// ------------------------------------
+function getEffectiveDividerOn(pg, card){
+  const mode = (pg && pg.dividerMode) ? pg.dividerMode : DEFAULT_PAGE_DIVIDER_MODE;
+  if(mode === 'ON') return true;
+  if(mode === 'OFF') return false;
+  // CARD
+  const v = (card && card.dividerOn !== undefined) ? card.dividerOn : DEFAULT_DIVIDER_ON;
+  return !!v;
 }
 
 // ------------------------------------
@@ -1418,7 +1455,7 @@ function renderPages(){
     const btn = document.createElement('button');
     btn.className = `tab ${i===curP ? 'active':''}`;
     btn.textContent = `P${i+1}`;
-    btn.onclick = () => { curP = i; renderPages(); updatePageControls(); };
+    btn.onclick = () => { curP = i; renderPages(); updatePageControls(); refreshEditorIfOpen(); };
     tabs.appendChild(btn);
 
     // Sheet
@@ -1535,6 +1572,16 @@ function renderSheetContent(sheetEl, pg, pIdx){
 
       const lblArea = document.createElement('div');
       lblArea.className = 'label-area';
+
+      // ★境界線（ページ設定を優先）
+      const dividerOn = getEffectiveDividerOn(pg, cData);
+      if(!dividerOn){
+        lblArea.style.borderTop = 'none';
+        lblArea.style.borderBottom = 'none';
+        lblArea.style.borderLeft = 'none';
+        lblArea.style.borderRight = 'none';
+      }
+
       const span = document.createElement('span');
       span.textContent = cData.label || '';
       lblArea.appendChild(span);
@@ -1612,6 +1659,12 @@ function updatePageControls(){
     document.getElementById('cardHmm').value = pg.cardHmm;
     document.getElementById('sizePreset').value = findSizePreset(pg.cardWmm, pg.cardHmm);
   }
+
+  // ★ページ全体の境界線モード
+  const pdm = document.getElementById('pageDividerMode');
+  if(pdm){
+    pdm.value = pg.dividerMode || DEFAULT_PAGE_DIVIDER_MODE;
+  }
 }
 
 function findSizePreset(w, h){
@@ -1632,12 +1685,14 @@ function addPage(){
     gridRows: DEFAULT_GRID_ROWS,
     cardWmm: 50,
     cardHmm: 50,
+    dividerMode: DEFAULT_PAGE_DIVIDER_MODE, // ★追加
     cards: []
   });
   curP = appData.pages.length - 1;
   saveData();
   renderPages();
   updatePageControls();
+  refreshEditorIfOpen();
 }
 
 function deleteCurrentPage(){
@@ -1652,6 +1707,7 @@ function deleteCurrentPage(){
   saveData();
   renderPages();
   updatePageControls();
+  refreshEditorIfOpen();
 }
 
 function onLayoutModeChange(v){
@@ -1659,6 +1715,7 @@ function onLayoutModeChange(v){
   saveData();
   renderPages();
   updatePageControls();
+  refreshEditorIfOpen();
 }
 
 function applyGridForCurrentPage(){
@@ -1669,6 +1726,7 @@ function applyGridForCurrentPage(){
   appData.pages[curP].gridRows = r;
   saveData();
   renderPages();
+  refreshEditorIfOpen();
 }
 
 function onSizePresetChange(v){
@@ -1692,6 +1750,24 @@ function applyCardSizeForCurrentPage(){
   appData.pages[curP].cardHmm = h;
   saveData();
   renderPages();
+  refreshEditorIfOpen();
+}
+
+// ★追加：ページ全体の境界線モード変更
+function onPageDividerModeChange(v){
+  appData.pages[curP].dividerMode = v;
+  saveData();
+  renderPages();
+  updatePageControls();
+  refreshEditorIfOpen();
+}
+
+function refreshEditorIfOpen(){
+  const modal = document.getElementById('editorModal');
+  if(modal && modal.style.display === 'flex' && curIdx !== null){
+    updateDividerUIStateForPage();
+    updatePreview();
+  }
 }
 
 // GRID/AUTO 共通: 空きスロットクリック時にカードデータを生成
@@ -1713,7 +1789,8 @@ function createNewCardData(){
     labelH: null,
     labelW: null,
     borderColor: null,
-    borderWidth: null
+    borderWidth: null,
+    dividerOn: DEFAULT_DIVIDER_ON
   };
 }
 
@@ -1727,6 +1804,9 @@ function openEditor(pIdx, cIdx){
   if(!c) return;
 
   tempState = JSON.parse(JSON.stringify(c));
+
+  // 旧データ保険
+  if(tempState.dividerOn === undefined) tempState.dividerOn = DEFAULT_DIVIDER_ON;
 
   document.getElementById('fL').value = tempState.label;
   document.getElementById('fS').value = tempState.scale;
@@ -1750,11 +1830,13 @@ function openEditor(pIdx, cIdx){
   bcPicker.value = normalizeHexColorOr(tempState.borderColor, DEFAULT_BORDER_COLOR);
   bwInput.value = (tempState.borderWidth !== null && tempState.borderWidth !== undefined) ? tempState.borderWidth : DEFAULT_BORDER_WIDTH;
 
+  // ★ページ設定に応じて「カード個別の境界線UI」を状態更新
+  updateDividerUIStateForPage();
+
   updatePreview(true);
 
   document.getElementById('editorModal').style.display = 'flex';
 
-  // ★開いた直後、表示領域が確定してから「見失い防止」を一度だけ走らせる
   requestAnimationFrame(() => {
     if(tempState.img){
       ensureImageVisibleInPreview();
@@ -1773,6 +1855,27 @@ function saveCard(){
   saveData();
   renderPages();
   closeModal();
+}
+
+// ★追加：ページ境界線モードに応じて、カード個別のトグルを有効/無効化
+function updateDividerUIStateForPage(){
+  const pg = appData.pages[curP];
+  const mode = (pg && pg.dividerMode) ? pg.dividerMode : DEFAULT_PAGE_DIVIDER_MODE;
+
+  const sel = document.getElementById('dividerToggle');
+  const hint = document.getElementById('dividerToggleHint');
+  if(!sel) return;
+
+  if(mode === 'CARD'){
+    sel.disabled = false;
+    sel.value = (tempState.dividerOn ? 'on' : 'off');
+    if(hint) hint.textContent = 'カードごとに保存されます。';
+  }else{
+    sel.disabled = true;
+    const forcedOn = (mode === 'ON');
+    sel.value = forcedOn ? 'on' : 'off';
+    if(hint) hint.textContent = `このページは「全て${forcedOn ? 'ON' : 'OFF'}」で上書き中です（ページバーで変更できます）。`;
+  }
 }
 
 // previewのDOM順序をposに合わせて入れ替える
@@ -1800,6 +1903,7 @@ function updatePreview(isFromOpen=false){
 
   const isVert = (pos === 'top' || pos === 'bottom');
 
+  // 一旦全部消してから、条件に応じて付与
   preview.labelEl.style.height = '';
   preview.labelEl.style.width = '';
   preview.labelEl.style.borderTop = '';
@@ -1807,16 +1911,24 @@ function updatePreview(isFromOpen=false){
   preview.labelEl.style.borderLeft = '';
   preview.labelEl.style.borderRight = '';
 
+  // ★境界線：ページ設定を優先
+  const pg = appData.pages[curP];
+  const dividerOn = getEffectiveDividerOn(pg, tempState);
+
   if(isVert){
     const hVal = (tempState.labelH !== null && tempState.labelH !== undefined) ? tempState.labelH : DEFAULT_LABEL_H_PERCENT;
     preview.labelEl.style.height = `${hVal}%`;
-    if(pos==='bottom') preview.labelEl.style.borderTop = '2px solid rgba(0,0,0,0.65)';
-    else preview.labelEl.style.borderBottom = '2px solid rgba(0,0,0,0.65)';
+    if(dividerOn){
+      if(pos==='bottom') preview.labelEl.style.borderTop = '2px solid rgba(0,0,0,0.65)';
+      else preview.labelEl.style.borderBottom = '2px solid rgba(0,0,0,0.65)';
+    }
   } else {
     const wVal = (tempState.labelW !== null && tempState.labelW !== undefined) ? tempState.labelW : DEFAULT_LABEL_W_PERCENT;
     preview.labelEl.style.width = `${wVal}%`;
-    if(pos==='left') preview.labelEl.style.borderRight = '2px solid rgba(0,0,0,0.65)';
-    else preview.labelEl.style.borderLeft = '2px solid rgba(0,0,0,0.65)';
+    if(dividerOn){
+      if(pos==='left') preview.labelEl.style.borderRight = '2px solid rgba(0,0,0,0.65)';
+      else preview.labelEl.style.borderLeft = '2px solid rgba(0,0,0,0.65)';
+    }
   }
 
   const bColor = (tempState.borderColor !== null && tempState.borderColor !== undefined) ? tempState.borderColor : DEFAULT_BORDER_COLOR;
@@ -1837,7 +1949,6 @@ function updatePreview(isFromOpen=false){
 
     applyPreviewImageTransform();
 
-    // ★“右下の見えないところ”に行く事故を防ぐ（開いた直後/画像差し替え直後）
     if(isFromOpen){
       requestAnimationFrame(() => ensureImageVisibleInPreview());
     }
@@ -1851,7 +1962,6 @@ function applyPreviewImageTransform(){
   preview.imgEl.style.transform = makeCenteredTransform(tempState.x, tempState.y, tempState.rotate, tempState.scale);
 }
 
-// 画像がプレビュー枠内にほぼ見えていないとき、自動で中央に戻す（保存は押さない限り反映されない）
 function ensureImageVisibleInPreview(){
   if(!tempState.img) return;
 
@@ -1862,7 +1972,6 @@ function ensureImageVisibleInPreview(){
   const interH = Math.max(0, Math.min(ar.bottom, ir.bottom) - Math.max(ar.top, ir.top));
   const interArea = interW * interH;
 
-  // ほぼ見えていない場合は中央へ
   if(interArea < 80){
     tempState.x = 0;
     tempState.y = 0;
@@ -1881,9 +1990,6 @@ function wireRangeInputs(){
     el.addEventListener('input', () => {
       const v = isInt ? parseInt(el.value, 10) : parseFloat(el.value);
       tempState[key] = (isNaN(v) ? (key==='scale'?1:0) : v);
-      if(key === 'x' || key === 'y' || key === 'scale') {
-        // 右下迷子を避けるため、値変更後に即反映
-      }
       updatePreview();
     });
   };
@@ -1921,6 +2027,15 @@ function wireLabelSizeInputs(){
 function wireSettingsInputs(){
   document.getElementById('labelPosSelect').addEventListener('change', (e)=>{
     tempState.labelPos = e.target.value;
+    updatePreview();
+  });
+
+  // カード個別の境界線トグル（ページ上書き中はdisabledなので基本発火しない）
+  document.getElementById('dividerToggle').addEventListener('change', (e)=>{
+    const pg = appData.pages[curP];
+    const mode = (pg && pg.dividerMode) ? pg.dividerMode : DEFAULT_PAGE_DIVIDER_MODE;
+    if(mode !== 'CARD') return;
+    tempState.dividerOn = (e.target.value === 'on');
     updatePreview();
   });
 
@@ -2141,14 +2256,16 @@ function autoFitCardImageDOM(pIdx, cIdx){
       return;
     }
 
-    const useCell = document.querySelector(`.cell[data-p-idx="${pIdx}"][data-c-idx="${cIdx}"]`);
-    if(!useCell){
+    const use = document.querySelector(`.cell[data-p-idx="${pIdx}"][data-c-idx="${cIdx}"]`) ||
+                document.querySelector(`.cell[data-pIdx="${pIdx}"][data-cIdx="${cIdx}"]`);
+
+    if(!use){
       c.x = 0; c.y = 0; c.rotate = 0; c.scale = 1;
       resolve();
       return;
     }
 
-    const imgArea = useCell.querySelector('.image-area');
+    const imgArea = use.querySelector('.image-area');
     if(!imgArea){
       c.x = 0; c.y = 0; c.rotate = 0; c.scale = 1;
       resolve();
