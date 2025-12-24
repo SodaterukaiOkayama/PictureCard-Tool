@@ -60,7 +60,7 @@
 
 ## 🧑‍🏫 想定用途
 
-- PECS（絵カード）
+
 - ビジュアルスケジュール
 - 療育支援
 - 特別支援教育
@@ -151,7 +151,7 @@ Works completely offline.
 
 ## 🧑‍🏫 Use Cases
 
-- PECS cards
+- Picture cards
 - Visual schedules
 - Special education
 - Therapy & support programs
